@@ -1,0 +1,373 @@
+# Redis Streams Configuration for Order Service
+# File: config/order-service.yml
+
+redis:
+  host: ${REDIS_HOST:-localhost}
+  port: ${REDIS_PORT:-6379}
+  password: ${REDIS_PASSWORD:-}
+  database: ${REDIS_DATABASE:-0}
+  pool_size: 20
+  min_idle_conns: 10
+  max_retries: 3
+  retry_backoff: 100ms
+  dial_timeout: 5s
+  read_timeout: 3s
+  write_timeout: 3s
+  pool_timeout: 4s
+  idle_timeout: 5m
+  client_name: order-service
+  tls:
+    enabled: ${REDIS_TLS_ENABLED:-false}
+    cert_file: ${REDIS_TLS_CERT_FILE:-}
+    key_file: ${REDIS_TLS_KEY_FILE:-}
+    ca_file: ${REDIS_TLS_CA_FILE:-}
+    insecure_skip_verify: false
+
+streams:
+  default_max_len: 100000
+  default_max_age: 48h
+  default_trim_strategy: "MAXLEN"
+  auto_create_streams: true
+  trim_interval: 10m
+
+consumers:
+  default_batch_size: 10
+  default_block_timeout: 2s
+  default_consumer_timeout: 30s
+  default_auto_ack: true
+  max_pending_messages: 1000
+  claim_min_idle_time: 60s
+  claim_interval: 120s
+
+topics:
+  - name: "order.created"
+    stream_name: "orders:created"
+    max_len: 50000
+    max_age: 24h
+    trim_strategy: "MAXLEN"
+    consumer_group: "order-processors"
+    dead_letter_topic: "order.created.failed"
+    retry_attempts: 3
+    description: "Order creation events"
+
+  - name: "order.updated"
+    stream_name: "orders:updated"
+    max_len: 50000
+    max_age: 24h
+    trim_strategy: "MAXLEN"
+    consumer_group: "order-processors"
+    dead_letter_topic: "order.updated.failed"
+    retry_attempts: 3
+    description: "Order update events"
+
+  - name: "order.cancelled"
+    stream_name: "orders:cancelled"
+    max_len: 10000
+    max_age: 168h  # 7 days
+    trim_strategy: "MAXLEN"
+    consumer_group: "order-processors"
+    retry_attempts: 5
+    description: "Order cancellation events"
+
+  - name: "order.created.failed"
+    stream_name: "orders:created:dlq"
+    max_len: 5000
+    max_age: 720h  # 30 days
+    trim_strategy: "MAXLEN"
+    consumer_group: "dead-letter-processors"
+    retry_attempts: 0
+    description: "Failed order creation events"
+
+  - name: "payment.requested"
+    stream_name: "payments:requested"
+    max_len: 25000
+    max_age: 48h
+    trim_strategy: "MAXLEN"
+    consumer_group: "payment-processors"
+    retry_attempts: 3
+    description: "Payment request events"
+
+monitoring:
+  enabled: true
+  metrics_interval: 30s
+  health_check_port: 8080
+  prometheus_path: "/metrics"
+
+logging:
+  level: ${LOG_LEVEL:-INFO}
+  format: ${LOG_FORMAT:-json}
+  output: ${LOG_OUTPUT:-stdout}
+  structured: true
+
+---
+# Redis Streams Configuration for Payment Service  
+# File: config/payment-service.yml
+
+redis:
+  host: ${REDIS_HOST:-localhost}
+  port: ${REDIS_PORT:-6379}
+  password: ${REDIS_PASSWORD:-}
+  database: ${REDIS_DATABASE:-1}  # Different DB for payment service
+  pool_size: 15
+  min_idle_conns: 8
+  max_retries: 3
+  retry_backoff: 100ms
+  dial_timeout: 5s
+  read_timeout: 3s
+  write_timeout: 3s
+  pool_timeout: 4s
+  idle_timeout: 5m
+  client_name: payment-service
+  tls:
+    enabled: ${REDIS_TLS_ENABLED:-false}
+    cert_file: ${REDIS_TLS_CERT_FILE:-}
+    key_file: ${REDIS_TLS_KEY_FILE:-}
+    ca_file: ${REDIS_TLS_CA_FILE:-}
+
+streams:
+  default_max_len: 75000
+  default_max_age: 72h
+  default_trim_strategy: "MAXLEN"
+  auto_create_streams: true
+  trim_interval: 15m
+
+consumers:
+  default_batch_size: 5  # Lower batch size for payment processing
+  default_block_timeout: 1s
+  default_consumer_timeout: 45s  # Longer timeout for payment processing
+  default_auto_ack: false  # Manual ack for payments
+  max_pending_messages: 500
+  claim_min_idle_time: 30s
+  claim_interval: 60s
+
+topics:
+  - name: "payment.requested"
+    stream_name: "payments:requested"
+    max_len: 25000
+    max_age: 48h
+    trim_strategy: "MAXLEN"
+    consumer_group: "payment-service"
+    dead_letter_topic: "payment.failed"
+    retry_attempts: 5
+    description: "Payment request processing"
+
+  - name: "payment.completed"
+    stream_name: "payments:completed"
+    max_len: 50000
+    max_age: 720h  # 30 days  # Keep completed payments longer
+    trim_strategy: "MAXLEN"
+    consumer_group: "payment-processors"
+    retry_attempts: 3
+    description: "Completed payment events"
+
+  - name: "payment.failed"
+    stream_name: "payments:failed"
+    max_len: 10000
+    max_age: 720h  # 30 days
+    trim_strategy: "MAXLEN"
+    consumer_group: "payment-failure-handlers"
+    retry_attempts: 3
+    description: "Failed payment events"
+
+  - name: "refund.requested"
+    stream_name: "refunds:requested"
+    max_len: 5000
+    max_age: 90d
+    trim_strategy: "MAXLEN"
+    consumer_group: "refund-processors"
+    retry_attempts: 3
+    description: "Refund request events"
+
+monitoring:
+  enabled: true
+  metrics_interval: 15s  # More frequent monitoring for payments
+  health_check_port: 8081
+  prometheus_path: "/metrics"
+
+logging:
+  level: ${LOG_LEVEL:-DEBUG}  # More verbose logging for payments
+  format: ${LOG_FORMAT:-json}
+  output: ${LOG_OUTPUT:-stdout}
+  structured: true
+
+---
+# Redis Streams Configuration for Notification Service
+# File: config/notification-service.yml
+
+redis:
+  host: ${REDIS_HOST:-localhost}
+  port: ${REDIS_PORT:-6379}
+  password: ${REDIS_PASSWORD:-}
+  database: ${REDIS_DATABASE:-2}  # Different DB for notifications
+  pool_size: 25  # Higher pool for notifications
+  min_idle_conns: 15
+  max_retries: 2  # Fewer retries for notifications
+  retry_backoff: 50ms
+  dial_timeout: 3s
+  read_timeout: 2s
+  write_timeout: 2s
+  pool_timeout: 3s
+  idle_timeout: 3m
+  client_name: notification-service
+
+streams:
+  default_max_len: 200000  # Higher volume for notifications
+  default_max_age: 7d
+  default_trim_strategy: "MAXLEN"
+  auto_create_streams: true
+  trim_interval: 5m
+
+consumers:
+  default_batch_size: 20  # Higher batch size for notifications
+  default_block_timeout: 500ms  # Faster processing
+  default_consumer_timeout: 10s  # Shorter timeout for notifications
+  default_auto_ack: true
+  max_pending_messages: 2000
+  claim_min_idle_time: 15s
+  claim_interval: 30s
+
+topics:
+  - name: "notification.email"
+    stream_name: "notifications:email"
+    max_len: 100000
+    max_age: 168h  # 7 days
+    trim_strategy: "MAXLEN"
+    consumer_group: "email-senders"
+    dead_letter_topic: "notification.email.failed"
+    retry_attempts: 3
+    description: "Email notification events"
+
+  - name: "notification.sms"
+    stream_name: "notifications:sms"
+    max_len: 50000
+    max_age: 3d
+    trim_strategy: "MAXLEN"
+    consumer_group: "sms-senders"
+    dead_letter_topic: "notification.sms.failed"
+    retry_attempts: 2
+    description: "SMS notification events"
+
+  - name: "notification.push"
+    stream_name: "notifications:push"
+    max_len: 150000
+    max_age: 1d
+    trim_strategy: "MAXLEN"
+    consumer_group: "push-senders"
+    dead_letter_topic: "notification.push.failed"
+    retry_attempts: 2
+    description: "Push notification events"
+
+  - name: "notification.email.failed"
+    stream_name: "notifications:email:dlq"
+    max_len: 10000
+    max_age: 720h  # 30 days
+    trim_strategy: "MAXLEN"
+    consumer_group: "notification-failure-handlers"
+    retry_attempts: 0
+    description: "Failed email notifications"
+
+  - name: "notification.webhook"
+    stream_name: "notifications:webhook"
+    max_len: 25000
+    max_age: 168h  # 7 days
+    trim_strategy: "MAXLEN"
+    consumer_group: "webhook-senders"
+    retry_attempts: 5
+    description: "Webhook notification events"
+
+monitoring:
+  enabled: true
+  metrics_interval: 10s  # High frequency monitoring
+  health_check_port: 8082
+  prometheus_path: "/metrics"
+
+logging:
+  level: ${LOG_LEVEL:-INFO}
+  format: ${LOG_FORMAT:-json}
+  output: ${LOG_OUTPUT:-stdout}
+  structured: true
+
+---
+# Redis Streams Configuration for Analytics Service
+# File: config/analytics-service.yml
+
+redis:
+  host: ${REDIS_HOST:-localhost}
+  port: ${REDIS_PORT:-6379}
+  password: ${REDIS_PASSWORD:-}
+  database: ${REDIS_DATABASE:-3}
+  pool_size: 30  # High pool for analytics
+  min_idle_conns: 20
+  max_retries: 1  # Fast fail for analytics
+  retry_backoff: 25ms
+  dial_timeout: 2s
+  read_timeout: 1s
+  write_timeout: 1s
+  pool_timeout: 2s
+  idle_timeout: 2m
+  client_name: analytics-service
+
+streams:
+  default_max_len: 1000000  # Very high for analytics
+  default_max_age: 30d  # Keep data longer
+  default_trim_strategy: "MAXLEN"
+  auto_create_streams: true
+  trim_interval: 30m
+
+consumers:
+  default_batch_size: 50  # Very high batch size
+  default_block_timeout: 100ms  # Very fast processing
+  default_consumer_timeout: 5s
+  default_auto_ack: true
+  max_pending_messages: 5000
+  claim_min_idle_time: 10s
+  claim_interval: 20s
+
+topics:
+  - name: "analytics.user_action"
+    stream_name: "analytics:user_actions"
+    max_len: 500000
+    max_age: 90d
+    trim_strategy: "MAXLEN"
+    consumer_group: "analytics-processors"
+    retry_attempts: 1  # Don't retry analytics events
+    description: "User action tracking events"
+
+  - name: "analytics.page_view"
+    stream_name: "analytics:page_views"
+    max_len: 1000000
+    max_age: 720h  # 30 days
+    trim_strategy: "MAXLEN"
+    consumer_group: "analytics-processors"
+    retry_attempts: 1
+    description: "Page view tracking events"
+
+  - name: "analytics.conversion"
+    stream_name: "analytics:conversions"
+    max_len: 100000
+    max_age: 365d  # Keep conversions for a year
+    trim_strategy: "MAXLEN"
+    consumer_group: "analytics-processors"
+    retry_attempts: 2
+    description: "Conversion tracking events"
+
+  - name: "analytics.performance"
+    stream_name: "analytics:performance"
+    max_len: 200000
+    max_age: 168h  # 7 days
+    trim_strategy: "MAXLEN"
+    consumer_group: "performance-processors"
+    retry_attempts: 0
+    description: "Performance metrics events"
+
+monitoring:
+  enabled: true
+  metrics_interval: 5s  # Very frequent for analytics
+  health_check_port: 8083
+  prometheus_path: "/metrics"
+
+logging:
+  level: ${LOG_LEVEL:-WARN}  # Less verbose for high volume
+  format: ${LOG_FORMAT:-json}
+  output: ${LOG_OUTPUT:-stdout}
+  structured: true
