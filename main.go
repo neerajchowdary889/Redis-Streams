@@ -60,7 +60,7 @@ func main() {
 	defer mq.Close()
 
 	// Start health check server
-	healthServer := Health.NewHealthServer(mq, config.Monitoring.HealthCheckPort, logger, RDMetrics.NewMetrics())
+	healthServer := Health.NewHealthServer(mq, config, config.Monitoring.HealthCheckPort, logger, RDMetrics.NewMetrics())
 	if err := healthServer.Start(); err != nil {
 		log.Fatalf("Failed to start health server: %v", err)
 	}
@@ -267,7 +267,7 @@ func publishExampleMessages(mq *redisstreams.RedisStreamMQ, logger RDConfig.Logg
 			if msgID, err := mq.Publish("order.created", orderEvent, headers); err != nil {
 				logger.Error("Failed to publish order created event", "error", err)
 			} else {
-				logger.Debug("Published order created event", 
+				logger.Debug("Published order created event",
 					"message_id", msgID, "order_id", orderEvent.OrderID)
 			}
 
@@ -282,7 +282,7 @@ func publishExampleMessages(mq *redisstreams.RedisStreamMQ, logger RDConfig.Logg
 			if msgID, err := mq.Publish("payment.requested", paymentReq); err != nil {
 				logger.Error("Failed to publish payment request", "error", err)
 			} else {
-				logger.Debug("Published payment request", 
+				logger.Debug("Published payment request",
 					"message_id", msgID, "order_id", paymentReq.OrderID)
 			}
 

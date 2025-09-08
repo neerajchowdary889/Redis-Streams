@@ -14,24 +14,25 @@ import (
 
 // HealthServer provides HTTP endpoints for health checks and metrics
 type HealthServer struct {
-	mq     *QueueModule.RedisStreamMQ
-	server *http.Server
-	logger RDConfig.Logger
+	mq      *QueueModule.RedisStreamMQ
+	server  *http.Server
+	logger  RDConfig.Logger
 	metrics *RDMetrics.Metrics
-	config *RDConfig.Config
+	config  *RDConfig.Config
 }
 
 // NewHealthServer creates a new health check server
-func NewHealthServer(mq *QueueModule.RedisStreamMQ, port int, logger RDConfig.Logger, metrics *RDMetrics.Metrics) *HealthServer {
+func NewHealthServer(mq *QueueModule.RedisStreamMQ, cfg *RDConfig.Config, port int, logger RDConfig.Logger, metrics *RDMetrics.Metrics) *HealthServer {
 	if logger == nil {
 		logger = &RDLogging.DefaultLogger{}
 	}
 
 	mux := http.NewServeMux()
 	hs := &HealthServer{
-		mq:     mq,
-		logger: logger,
+		mq:      mq,
+		logger:  logger,
 		metrics: metrics,
+		config:  cfg,
 		server: &http.Server{
 			Addr:         fmt.Sprintf(":%d", port),
 			Handler:      mux,
@@ -56,23 +57,23 @@ func NewHealthServer(mq *QueueModule.RedisStreamMQ, port int, logger RDConfig.Lo
 // Start starts the health check server
 func (hs *HealthServer) Start() error {
 	hs.logger.Info("Starting health check server", "addr", hs.server.Addr)
-	
+
 	go func() {
 		if err := hs.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			hs.logger.Error("Health server error", "error", err)
 		}
 	}()
-	
+
 	return nil
 }
 
 // Stop stops the health check server gracefully
 func (hs *HealthServer) Stop() error {
 	hs.logger.Info("Stopping health check server")
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	
+
 	return hs.server.Shutdown(ctx)
 }
 
@@ -81,7 +82,7 @@ func (hs *HealthServer) healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	health := hs.metrics.GetHealthStatus()
-	
+
 	// Add Redis connectivity check
 	if err := hs.mq.Health(); err != nil {
 		health["redis_connected"] = false
@@ -133,8 +134,8 @@ func (hs *HealthServer) readinessHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	status := map[string]interface{}{
-		"ready":  ready,
-		"issues": issues,
+		"ready":     ready,
+		"issues":    issues,
 		"timestamp": time.Now().Unix(),
 	}
 
@@ -176,7 +177,7 @@ func (hs *HealthServer) prometheusHandler(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusOK)
 
 	metrics := hs.mq.GetMetrics()
-	
+
 	// Convert metrics to Prometheus format
 	fmt.Fprintf(w, "# HELP redis_streams_messages_published_total Total number of messages published\n")
 	fmt.Fprintf(w, "# TYPE redis_streams_messages_published_total counter\n")
@@ -251,15 +252,17 @@ func (hs *HealthServer) infoHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	info := map[string]interface{}{
-		"service":     "redis-streams-mq",
-		"version":     "1.0.0",
-		"build_time":  time.Now().Format(time.RFC3339), // In production, set at build time
-		"go_version":  "go1.21", // In production, use runtime.Version()
-		"topics":      len(hs.mq.ListTopics()),
-		"uptime":      hs.metrics.GetUptime().Seconds(),
-		"redis_addr":  fmt.Sprintf("%s:%d", hs.config.Redis.Host, hs.config.Redis.Port),
-		"redis_db":    hs.config.Redis.Database,
-		"client_name": hs.config.Redis.ClientName,
+		"service":    "redis-streams-mq",
+		"version":    "1.0.0",
+		"build_time": time.Now().Format(time.RFC3339), // In production, set at build time
+		"go_version": "go1.21",                        // In production, use runtime.Version()
+		"topics":     len(hs.mq.ListTopics()),
+		"uptime":     hs.metrics.GetUptime().Seconds(),
+	}
+	if hs.config != nil {
+		info["redis_addr"] = fmt.Sprintf("%s:%d", hs.config.Redis.Host, hs.config.Redis.Port)
+		info["redis_db"] = hs.config.Redis.Database
+		info["client_name"] = hs.config.Redis.ClientName
 	}
 
 	json.NewEncoder(w).Encode(info)
@@ -271,7 +274,7 @@ func (hs *HealthServer) topicsHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	topics := make(map[string]interface{})
-	
+
 	for _, topicName := range hs.mq.ListTopics() {
 		topicInfo := map[string]interface{}{
 			"name": topicName,

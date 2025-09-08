@@ -1,4 +1,4 @@
-package RedisStreams
+package Metrics
 
 import (
 	"fmt"
@@ -9,43 +9,43 @@ import (
 // Metrics holds various metrics for monitoring
 type Metrics struct {
 	mu sync.RWMutex
-	
+
 	// Message metrics
-	messagesPublished  map[string]int64
-	messagesProcessed  map[string]int64
-	publishErrors      map[string]int64
-	processingErrors   map[string]int64
-	
+	messagesPublished map[string]int64
+	messagesProcessed map[string]int64
+	publishErrors     map[string]int64
+	processingErrors  map[string]int64
+
 	// Performance metrics
-	processingTimes    map[string][]time.Duration
-	streamLengths      map[string]int64
-	
+	processingTimes map[string][]time.Duration
+	streamLengths   map[string]int64
+
 	// Connection metrics
-	connectionErrors   int64
-	reconnections      int64
-	
+	connectionErrors int64
+	reconnections    int64
+
 	// Consumer metrics
-	activeConsumers    map[string]int64
-	pendingMessages    map[string]int64
-	
+	activeConsumers map[string]int64
+	pendingMessages map[string]int64
+
 	// Timestamps
-	startTime          time.Time
-	lastUpdated        time.Time
+	startTime   time.Time
+	lastUpdated time.Time
 }
 
 // NewMetrics creates a new metrics instance
 func NewMetrics() *Metrics {
 	return &Metrics{
-		messagesPublished:  make(map[string]int64),
-		messagesProcessed:  make(map[string]int64),
-		publishErrors:      make(map[string]int64),
-		processingErrors:   make(map[string]int64),
-		processingTimes:    make(map[string][]time.Duration),
-		streamLengths:      make(map[string]int64),
-		activeConsumers:    make(map[string]int64),
-		pendingMessages:    make(map[string]int64),
-		startTime:          time.Now(),
-		lastUpdated:        time.Now(),
+		messagesPublished: make(map[string]int64),
+		messagesProcessed: make(map[string]int64),
+		publishErrors:     make(map[string]int64),
+		processingErrors:  make(map[string]int64),
+		processingTimes:   make(map[string][]time.Duration),
+		streamLengths:     make(map[string]int64),
+		activeConsumers:   make(map[string]int64),
+		pendingMessages:   make(map[string]int64),
+		startTime:         time.Now(),
+		lastUpdated:       time.Now(),
 	}
 }
 
@@ -93,7 +93,7 @@ func (m *Metrics) IncProcessingErrors(topic string) {
 func (m *Metrics) RecordProcessingTime(topic string, duration time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	// Keep only last 100 measurements per topic to avoid memory issues
 	times := m.processingTimes[topic]
 	if len(times) >= 100 {
@@ -175,12 +175,12 @@ func (m *Metrics) GetPublishErrors(topic string) int64 {
 func (m *Metrics) GetAverageProcessingTime(topic string) time.Duration {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	times := m.processingTimes[topic]
 	if len(times) == 0 {
 		return 0
 	}
-	
+
 	var total time.Duration
 	for _, t := range times {
 		total += t
@@ -206,7 +206,7 @@ func (m *Metrics) GetUptime() time.Duration {
 func (m *Metrics) GetAll() map[string]interface{} {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	// Calculate average processing times
 	avgProcessingTimes := make(map[string]float64)
 	for topic, times := range m.processingTimes {
@@ -218,7 +218,7 @@ func (m *Metrics) GetAll() map[string]interface{} {
 			avgProcessingTimes[topic] = float64(total) / float64(len(times)) / float64(time.Millisecond)
 		}
 	}
-	
+
 	return map[string]interface{}{
 		"uptime_seconds":         time.Since(m.startTime).Seconds(),
 		"last_updated":           m.lastUpdated.Unix(),
@@ -239,10 +239,10 @@ func (m *Metrics) GetAll() map[string]interface{} {
 func (m *Metrics) GetHealthStatus() map[string]interface{} {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	status := "healthy"
 	issues := []string{}
-	
+
 	// Check for high error rates
 	for topic, errors := range m.processingErrors {
 		processed := m.messagesProcessed[topic]
@@ -254,24 +254,24 @@ func (m *Metrics) GetHealthStatus() map[string]interface{} {
 			}
 		}
 	}
-	
+
 	// Check for connection issues
 	if m.connectionErrors > 10 {
 		status = "degraded"
 		issues = append(issues, "High number of connection errors")
 	}
-	
+
 	// Check for stale metrics (no updates in 5 minutes)
 	if time.Since(m.lastUpdated) > 5*time.Minute {
 		status = "stale"
 		issues = append(issues, "Metrics not updated recently")
 	}
-	
+
 	return map[string]interface{}{
-		"status":      status,
-		"issues":      issues,
-		"last_check":  time.Now().Unix(),
-		"uptime":      time.Since(m.startTime).Seconds(),
+		"status":     status,
+		"issues":     issues,
+		"last_check": time.Now().Unix(),
+		"uptime":     time.Since(m.startTime).Seconds(),
 	}
 }
 
@@ -279,7 +279,7 @@ func (m *Metrics) GetHealthStatus() map[string]interface{} {
 func (m *Metrics) Reset() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	m.messagesPublished = make(map[string]int64)
 	m.messagesProcessed = make(map[string]int64)
 	m.publishErrors = make(map[string]int64)
@@ -298,12 +298,12 @@ func (m *Metrics) Reset() {
 func (m *Metrics) GetSummary() map[string]interface{} {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	totalPublished := int64(0)
 	totalProcessed := int64(0)
 	totalPublishErrors := int64(0)
 	totalProcessingErrors := int64(0)
-	
+
 	for _, count := range m.messagesPublished {
 		totalPublished += count
 	}
@@ -316,13 +316,13 @@ func (m *Metrics) GetSummary() map[string]interface{} {
 	for _, count := range m.processingErrors {
 		totalProcessingErrors += count
 	}
-	
+
 	return map[string]interface{}{
-		"total_published":        totalPublished,
-		"total_processed":        totalProcessed,
-		"total_publish_errors":   totalPublishErrors,
+		"total_published":         totalPublished,
+		"total_processed":         totalProcessed,
+		"total_publish_errors":    totalPublishErrors,
 		"total_processing_errors": totalProcessingErrors,
-		"uptime_seconds":         time.Since(m.startTime).Seconds(),
-		"topic_count":            len(m.messagesPublished),
+		"uptime_seconds":          time.Since(m.startTime).Seconds(),
+		"topic_count":             len(m.messagesPublished),
 	}
 }
