@@ -53,3 +53,31 @@ Use per-service YAML in `config/` (see `order-service.yml`, etc.) or a minimal e
 ## Versioning
 
 Module path is `RedisStreams`; keep it consistent across projects.
+
+## RDS.sh commands
+
+Use the helper script for local dev and gRPC service:
+
+- start: start Redis and monitoring via docker-compose
+- stop: stop all services
+- restart: restart docker services
+- logs: tail Redis logs
+- redis-cli: open Redis CLI in the container
+- monitor: run Redis MONITOR
+- clean: remove containers/volumes and build artifacts
+- deps: go mod tidy and download
+- build: build the example app to `bin/redis_streams`
+- run: build and run the example app
+- setup: create a `redis.conf` file
+- protos: generate protobuf stubs into `api/proto` (same dir as proto)
+- run-grpc: build and run the gRPC server (`cmd/grpc-server`)
+- debug: basic stream introspection helpers
+- health: check container health
+
+Examples:
+
+```bash
+./RDS.sh protos
+./RDS.sh run-grpc                       # uses Config/config.yml by default
+CONFIG_PATH=Config/config.yml ./RDS.sh run-grpc -- --port 9090
+```
