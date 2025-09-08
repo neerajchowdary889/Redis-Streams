@@ -87,7 +87,7 @@ func main() {
 
 // setupConsumers sets up message consumers for different topics
 func setupConsumers(mq *redisstreams.RedisStreamMQ, logger RDConfig.Logger) {
-	// Order created consumer
+	// Order created consumer (auto-ack)
 	orderCreatedConsumer := redisstreams.ConsumerConfig{
 		TopicName:       "order.created",
 		ConsumerName:    "order-processor-1",
@@ -102,35 +102,109 @@ func setupConsumers(mq *redisstreams.RedisStreamMQ, logger RDConfig.Logger) {
 		logger.Error("Failed to subscribe to order.created", "error", err)
 	}
 
-	// Order updated consumer
+	// Second order.created consumer (auto-ack)
+	if err := mq.Subscribe(redisstreams.ConsumerConfig{
+		TopicName:       "order.created",
+		ConsumerName:    "order-processor-2",
+		BatchSize:       5,
+		BlockTimeout:    2 * time.Second,
+		ConsumerTimeout: 30 * time.Second,
+		AutoAck:         true,
+		Description:     "Processes order creation events (worker 2)",
+	}, handleOrderCreated); err != nil {
+		logger.Error("Failed to subscribe second order.created consumer", "error", err)
+	}
+
+	// Order updated consumer (manual ack)
 	orderUpdatedConsumer := redisstreams.ConsumerConfig{
 		TopicName:       "order.updated",
 		ConsumerName:    "order-processor-1",
 		BatchSize:       5,
 		BlockTimeout:    2 * time.Second,
 		ConsumerTimeout: 30 * time.Second,
-		AutoAck:         true,
+		AutoAck:         false,
 		Description:     "Processes order update events",
 	}
 
-	if err := mq.Subscribe(orderUpdatedConsumer, handleOrderUpdated); err != nil {
+	if err := mq.Subscribe(orderUpdatedConsumer, func(ctx context.Context, topic, msgID string, fields map[string]interface{}) error {
+		if err := handleOrderUpdated(ctx, topic, msgID, fields); err != nil {
+			return err
+		}
+		// manual ACK for order.updated
+		if err := mq.AckMessage(topic, "", msgID); err != nil {
+			logger.Error("Failed to ACK order.updated", "error", err)
+		}
+		return nil
+	}); err != nil {
 		logger.Error("Failed to subscribe to order.updated", "error", err)
 	}
 
-	// Payment request consumer
+	// Second order.updated consumer (manual ack)
+	if err := mq.Subscribe(redisstreams.ConsumerConfig{
+		TopicName:       "order.updated",
+		ConsumerName:    "order-processor-2",
+		BatchSize:       5,
+		BlockTimeout:    2 * time.Second,
+		ConsumerTimeout: 30 * time.Second,
+		AutoAck:         false,
+		Description:     "Processes order update events (worker 2)",
+	}, func(ctx context.Context, topic, msgID string, fields map[string]interface{}) error {
+		if err := handleOrderUpdated(ctx, topic, msgID, fields); err != nil {
+			return err
+		}
+		if err := mq.AckMessage(topic, "", msgID); err != nil {
+			logger.Error("Failed to ACK order.updated (worker 2)", "error", err)
+		}
+		return nil
+	}); err != nil {
+		logger.Error("Failed to subscribe second order.updated consumer", "error", err)
+	}
+
+	// Payment request consumer (manual ack)
 	paymentConsumer := redisstreams.ConsumerConfig{
 		TopicName:       "payment.requested",
 		ConsumerName:    "payment-processor-1",
 		BatchSize:       3,
 		BlockTimeout:    1 * time.Second,
 		ConsumerTimeout: 45 * time.Second,
-		AutoAck:         false, // Manual ack for payments
+		AutoAck:         false,
 		MaxRetries:      5,
 		Description:     "Processes payment requests",
 	}
 
-	if err := mq.Subscribe(paymentConsumer, handlePaymentRequest); err != nil {
+	if err := mq.Subscribe(paymentConsumer, func(ctx context.Context, topic, msgID string, fields map[string]interface{}) error {
+		if err := handlePaymentRequest(ctx, topic, msgID, fields); err != nil {
+			return err
+		}
+		// manual ACK for payment.requested
+		if err := mq.AckMessage(topic, "", msgID); err != nil {
+			logger.Error("Failed to ACK payment.requested", "error", err)
+		}
+		return nil
+	}); err != nil {
 		logger.Error("Failed to subscribe to payment.requested", "error", err)
+	}
+
+	// Second payment consumer (manual ack)
+	if err := mq.Subscribe(redisstreams.ConsumerConfig{
+		TopicName:       "payment.requested",
+		ConsumerName:    "payment-processor-2",
+		BatchSize:       3,
+		BlockTimeout:    1 * time.Second,
+		ConsumerTimeout: 45 * time.Second,
+		AutoAck:         false,
+		MaxRetries:      5,
+		Description:     "Processes payment requests (worker 2)",
+	}, func(ctx context.Context, topic, msgID string, fields map[string]interface{}) error {
+		if err := handlePaymentRequest(ctx, topic, msgID, fields); err != nil {
+			return err
+		}
+		if err := mq.AckMessage(topic, "", msgID); err != nil {
+			logger.Error("Failed to ACK payment.requested (worker 2)", "error", err)
+		}
+		return nil
+	}); err != nil {
+		logger.Error("Failed to subscribe second payment.requested consumer", "error", err)
 	}
 }
 

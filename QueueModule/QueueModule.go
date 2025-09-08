@@ -412,8 +412,9 @@ func (mq *RedisStreamMQ) Subscribe(consumerConfig ConsumerConfig, handler Messag
 func (mq *RedisStreamMQ) consumeMessages(streamName, groupName string, consumer *Consumer) {
 	defer mq.wg.Done()
 	defer func() {
+		mq.mu.Lock()
 		consumer.IsRunning = false
-		close(consumer.StopChan)
+		mq.mu.Unlock()
 	}()
 
 	config := consumer.Config
@@ -682,8 +683,9 @@ func (mq *RedisStreamMQ) Close() error {
 	// Signal all consumers to stop
 	mq.mu.Lock()
 	for _, consumer := range mq.activeConsumers {
-		if consumer.IsRunning {
+if consumer.IsRunning {
 			close(consumer.StopChan)
+			consumer.IsRunning = false
 		}
 	}
 	mq.mu.Unlock()

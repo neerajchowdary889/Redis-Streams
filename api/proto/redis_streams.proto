@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package redisstreamspb;
+
+option go_package = "RedisStreams/api/proto;redisstreamspb";
+
+import "google/protobuf/struct.proto";
+
+message PublishRequest {
+  string topic = 1;
+  // oneof payload
+  string text = 2;
+  bytes bytes_data = 3;
+  google.protobuf.Struct json = 4;
+  map<string, string> headers = 5;
+}
+
+message PublishResponse {
+  string id = 1;
+}
+
+message BatchMessage {
+  string topic = 1;
+  string id = 2; // optional, "*" for auto
+  google.protobuf.Struct fields = 3; // raw fields to XADD
+}
+
+message PublishBatchRequest {
+  repeated BatchMessage messages = 1;
+}
+
+message PublishBatchResponse {}
+
+message SubscribeRequest {
+  string topic = 1;
+  string consumer_name = 2;
+  int64 batch_size = 3;
+  int64 block_timeout_ms = 4;
+  int64 consumer_timeout_ms = 5;
+  bool auto_ack = 6;
+}
+
+message Message {
+  string topic = 1;
+  string id = 2;
+  google.protobuf.Struct fields = 3;
+}
+
+message AckRequest {
+  string topic = 1;
+  string consumer_group = 2; // optional; default group from topic
+  string id = 3;
+}
+
+message AckResponse {}
+
+message ListTopicsRequest {}
+message ListTopicsResponse {
+  repeated string names = 1;
+}
+
+service RedisStreams {
+  rpc Publish(PublishRequest) returns (PublishResponse);
+  rpc PublishBatch(PublishBatchRequest) returns (PublishBatchResponse);
+  rpc Subscribe(SubscribeRequest) returns (stream Message);
+  rpc Ack(AckRequest) returns (AckResponse);
+  rpc ListTopics(ListTopicsRequest) returns (ListTopicsResponse);
+}
+
+

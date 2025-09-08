@@ -29,6 +29,8 @@ show_help() {
     echo "  run           - Run the example application"
     echo "  deps          - Install Go dependencies"
     echo "  setup         - Initial setup (create redis.conf)"
+    echo "  protos        - Generate gRPC protobuf stubs"
+    echo "  run-grpc      - Run the gRPC server"
     echo "  debug         - Show debug information about streams and consumers"
     echo "  health        - Check the health of the Redis container"
     echo "  help          - Show this help message"
@@ -96,6 +98,27 @@ run_app() {
     build_app
     echo -e "${BLUE}Running application...${NC}"
     "$APP_BINARY"
+}
+
+# Generate protobufs
+gen_protos() {
+    echo -e "${BLUE}Generating protobuf stubs...${NC}"
+    PROTO_DIR="api/proto"
+    protoc -I "$PROTO_DIR" \
+      --go_out=paths=source_relative:"$PROTO_DIR" \
+      --go-grpc_out=paths=source_relative:"$PROTO_DIR" \
+      "$PROTO_DIR/redis_streams.proto"
+    echo -e "${GREEN}Protobuf generation completed.${NC}"
+}
+
+# Run gRPC server
+run_grpc() {
+    install_deps
+    gen_protos
+    echo -e "${BLUE}Building gRPC server...${NC}"
+    go build -o ./bin/redis_streams_grpc ./cmd/grpc-server
+    echo -e "${BLUE}Starting gRPC server...${NC}"
+    CONFIG_PATH=${CONFIG_PATH:-Config/config.yml} ./bin/redis_streams_grpc ${GRPC_FLAGS:-}
 }
 
 # Run tests
@@ -215,6 +238,12 @@ case "$1" in
         ;;
     test)
         run_tests
+        ;;
+    protos)
+        gen_protos
+        ;;
+    run-grpc)
+        run_grpc
         ;;
     setup)
         setup_redis
