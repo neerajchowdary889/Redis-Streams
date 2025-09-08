@@ -31,22 +31,22 @@ func NewConfigLoader(configPath, envPrefix string) *ConfigLoader {
 // LoadConfig loads configuration from YAML file and environment variables
 func (cl *ConfigLoader) LoadConfig() (*Config, error) {
 	config := &Config{}
-	
+
 	// Load from file if provided
 	if cl.configPath != "" {
 		if err := cl.loadFromFile(config); err != nil {
 			return nil, fmt.Errorf("failed to load config from file: %w", err)
 		}
 	}
-	
+
 	// Override with environment variables
 	cl.loadFromEnv(config)
-	
+
 	// Validate and set defaults
 	if err := cl.validateAndSetDefaults(config); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
-	
+
 	return config, nil
 }
 
@@ -55,19 +55,19 @@ func (cl *ConfigLoader) loadFromFile(config *Config) error {
 	if _, err := os.Stat(cl.configPath); os.IsNotExist(err) {
 		return fmt.Errorf("config file not found: %s", cl.configPath)
 	}
-	
+
 	data, err := os.ReadFile(cl.configPath)
 	if err != nil {
 		return fmt.Errorf("failed to read config file: %w", err)
 	}
-	
+
 	// Expand environment variables in the YAML content
 	expandedData := os.ExpandEnv(string(data))
-	
+
 	if err := yaml.Unmarshal([]byte(expandedData), config); err != nil {
 		return fmt.Errorf("failed to unmarshal YAML config: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -92,7 +92,7 @@ func (cl *ConfigLoader) loadFromEnv(config *Config) {
 	if clientName := cl.getEnv("REDIS_CLIENT_NAME"); clientName != "" {
 		config.Redis.ClientName = clientName
 	}
-	
+
 	// TLS configuration
 	if cl.getEnvBool("REDIS_TLS_ENABLED") {
 		config.Redis.TLS.Enabled = true
@@ -106,7 +106,7 @@ func (cl *ConfigLoader) loadFromEnv(config *Config) {
 	if caFile := cl.getEnv("REDIS_TLS_CA_FILE"); caFile != "" {
 		config.Redis.TLS.CAFile = caFile
 	}
-	
+
 	// Timeout configurations
 	if dialTimeout := cl.getEnvDuration("REDIS_DIAL_TIMEOUT"); dialTimeout > 0 {
 		config.Redis.DialTimeout = dialTimeout
@@ -117,7 +117,7 @@ func (cl *ConfigLoader) loadFromEnv(config *Config) {
 	if writeTimeout := cl.getEnvDuration("REDIS_WRITE_TIMEOUT"); writeTimeout > 0 {
 		config.Redis.WriteTimeout = writeTimeout
 	}
-	
+
 	// Logging configuration
 	if level := cl.getEnv("LOG_LEVEL"); level != "" {
 		config.Logging.Level = level
@@ -131,7 +131,7 @@ func (cl *ConfigLoader) loadFromEnv(config *Config) {
 	if cl.getEnvBool("LOG_STRUCTURED") {
 		config.Logging.Structured = true
 	}
-	
+
 	// Monitoring configuration
 	if cl.getEnvBool("MONITORING_ENABLED") {
 		config.Monitoring.Enabled = true
@@ -183,7 +183,7 @@ func (cl *ConfigLoader) validateAndSetDefaults(config *Config) error {
 	if config.Redis.ClientName == "" {
 		config.Redis.ClientName = "redis-streams-client"
 	}
-	
+
 	// Streams defaults
 	if config.Streams.DefaultMaxLen == 0 {
 		config.Streams.DefaultMaxLen = 1000000
@@ -197,7 +197,7 @@ func (cl *ConfigLoader) validateAndSetDefaults(config *Config) error {
 	if config.Streams.TrimInterval == 0 {
 		config.Streams.TrimInterval = 5 * time.Minute
 	}
-	
+
 	// Consumers defaults
 	if config.Consumers.DefaultBatchSize == 0 {
 		config.Consumers.DefaultBatchSize = 10
@@ -217,7 +217,10 @@ func (cl *ConfigLoader) validateAndSetDefaults(config *Config) error {
 	if config.Consumers.ClaimInterval == 0 {
 		config.Consumers.ClaimInterval = 60 * time.Second
 	}
-	
+
+	// DeleteAfterAck default (disabled unless explicitly enabled)
+	// No change needed; zero-value false is acceptable.
+
 	// Logging defaults
 	if config.Logging.Level == "" {
 		config.Logging.Level = "INFO"
@@ -228,7 +231,7 @@ func (cl *ConfigLoader) validateAndSetDefaults(config *Config) error {
 	if config.Logging.Output == "" {
 		config.Logging.Output = "stdout"
 	}
-	
+
 	// Monitoring defaults
 	if config.Monitoring.MetricsInterval == 0 {
 		config.Monitoring.MetricsInterval = 30 * time.Second
@@ -239,23 +242,23 @@ func (cl *ConfigLoader) validateAndSetDefaults(config *Config) error {
 	if config.Monitoring.PrometheusPath == "" {
 		config.Monitoring.PrometheusPath = "/metrics"
 	}
-	
+
 	// Validate topics
 	if len(config.Topics) == 0 {
 		return fmt.Errorf("no topics configured")
 	}
-	
+
 	topicNames := make(map[string]bool)
 	for i, topic := range config.Topics {
 		if topic.Name == "" {
 			return fmt.Errorf("topic at index %d has empty name", i)
 		}
-		
+
 		if topicNames[topic.Name] {
 			return fmt.Errorf("duplicate topic name: %s", topic.Name)
 		}
 		topicNames[topic.Name] = true
-		
+
 		// Set topic defaults
 		if topic.StreamName == "" {
 			config.Topics[i].StreamName = fmt.Sprintf("stream:%s", topic.Name)
@@ -276,7 +279,7 @@ func (cl *ConfigLoader) validateAndSetDefaults(config *Config) error {
 			config.Topics[i].RetryAttempts = 3
 		}
 	}
-	
+
 	return nil
 }
 
@@ -326,7 +329,7 @@ func LoadConfigWithDefaults(configPath string) (*Config, error) {
 			"/etc/redis-streams/config.yml",
 			filepath.Join(os.Getenv("HOME"), ".redis-streams", "config.yml"),
 		}
-		
+
 		for _, path := range possiblePaths {
 			if _, err := os.Stat(path); err == nil {
 				configPath = path
@@ -334,7 +337,7 @@ func LoadConfigWithDefaults(configPath string) (*Config, error) {
 			}
 		}
 	}
-	
+
 	return LoadConfigFromPath(configPath)
 }
 
@@ -344,17 +347,17 @@ func SaveConfig(config *Config, filePath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
-	
+
 	// Create directory if it doesn't exist
 	if dir := filepath.Dir(filePath); dir != "" {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("failed to create config directory: %w", err)
 		}
 	}
-	
+
 	if err := os.WriteFile(filePath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
-	
+
 	return nil
 }

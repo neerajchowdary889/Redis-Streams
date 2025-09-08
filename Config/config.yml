@@ -26,6 +26,7 @@ consumers:
   default_block_timeout: 100ms
   default_consumer_timeout: 5s
   default_auto_ack: true
+  delete_after_ack: true
   max_pending_messages: 5000
   claim_min_idle_time: 10s
   claim_interval: 15s
@@ -39,6 +40,33 @@ topics:
     consumer_group: "example-group"
     retry_attempts: 3
     description: "Example topic"
+
+  - name: "order.created"
+    stream_name: "orders:created"
+    max_len: 50000
+    max_age: 24h
+    trim_strategy: "MAXLEN"
+    consumer_group: "order-processors"
+    retry_attempts: 3
+    description: "Order creation events"
+
+  - name: "order.updated"
+    stream_name: "orders:updated"
+    max_len: 50000
+    max_age: 24h
+    trim_strategy: "MAXLEN"
+    consumer_group: "order-processors"
+    retry_attempts: 3
+    description: "Order update events"
+
+  - name: "payment.requested"
+    stream_name: "payments:requested"
+    max_len: 25000
+    max_age: 48h
+    trim_strategy: "MAXLEN"
+    consumer_group: "payment-processors"
+    retry_attempts: 5
+    description: "Payment request events"
 
 monitoring:
   enabled: true

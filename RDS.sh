@@ -14,7 +14,7 @@ NC='\033[0m' # No Colorolor
 
 # Helper function to show help
 show_help() {
-    echo "Usage: ./jetstreams.sh [command]"
+    echo "Usage: ./RDS.sh [command]"
     echo ""
     echo "Available commands:"
     echo "  start         - Start Redis and monitoring services"
@@ -94,8 +94,8 @@ build_app() {
 # Run the application
 run_app() {
     build_app
-    echo -e "${BLUE}Running example application...${NC}"
-    "./$APP_BINARY"
+    echo -e "${BLUE}Running application...${NC}"
+    "$APP_BINARY"
 }
 
 # Run tests
@@ -145,8 +145,8 @@ dev_setup() {
     setup_redis
     start_services
     echo -e "${GREEN}Development environment ready!${NC}"
-    echo "Run './jetstreams.sh run' in another terminal to start the example app"
-    echo "Visit http://localhost:8001 for Redis Insight monitoring"
+    echo "Run './RDS.sh run' in another terminal to start the app"
+    echo "Visit http://localhost:5540 for Redis Insight monitoring"
 }
 
 # Debug Redis streams

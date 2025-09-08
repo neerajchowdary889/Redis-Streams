@@ -41,7 +41,7 @@ func main() {
 	// Load configuration
 	configPath := os.Getenv("CONFIG_PATH")
 	if configPath == "" {
-		configPath = "config.yml"
+		configPath = "Config/config.yml"
 	}
 
 	config, err := RDConfig.LoadConfigFromPath(configPath)

@@ -36,12 +36,12 @@ services:
       - redis-network
     restart: unless-stopped
 
-  # Optional: Redis Insight for better monitoring
+  # Optional: Redis Insight for better monitoring (v2 uses port 5540)
   redis-insight:
-    image: redislabs/redisinsight:latest
+    image: redis/redisinsight:latest
     container_name: redis-insight
     ports:
-      - "8001:8001"
+      - "5540:5540"
     volumes:
       - redis_insight_data:/db
     depends_on:

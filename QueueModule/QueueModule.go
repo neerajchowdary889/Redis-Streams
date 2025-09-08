@@ -494,6 +494,12 @@ func (mq *RedisStreamMQ) processMessage(streamName, groupName string, config Con
 			ackCtx, ackCancel := context.WithTimeout(mq.ctx, time.Second)
 			mq.client.XAck(ackCtx, streamName, groupName, msg.ID)
 			ackCancel()
+
+			if mq.config.Consumers.DeleteAfterAck {
+				delCtx, delCancel := context.WithTimeout(mq.ctx, time.Second)
+				mq.client.XDel(delCtx, streamName, msg.ID)
+				delCancel()
+			}
 		}
 	}
 }
@@ -527,6 +533,12 @@ func (mq *RedisStreamMQ) handleMessageFailure(streamName, groupName string,
 		ctx, cancel := context.WithTimeout(mq.ctx, time.Second)
 		mq.client.XAck(ctx, streamName, groupName, msg.ID)
 		cancel()
+
+		if mq.config.Consumers.DeleteAfterAck {
+			delCtx, delCancel := context.WithTimeout(mq.ctx, time.Second)
+			mq.client.XDel(delCtx, streamName, msg.ID)
+			delCancel()
+		}
 	}
 	// If not max retries, message will remain unacknowledged for retry
 }
@@ -569,7 +581,19 @@ func (mq *RedisStreamMQ) AckMessage(topicName, consumerGroup, msgID string) erro
 	ctx, cancel := context.WithTimeout(mq.ctx, time.Second)
 	defer cancel()
 
-	return mq.client.XAck(ctx, streamName, groupName, msgID).Err()
+	if err := mq.client.XAck(ctx, streamName, groupName, msgID).Err(); err != nil {
+		return err
+	}
+
+	if mq.config.Consumers.DeleteAfterAck {
+		delCtx, delCancel := context.WithTimeout(mq.ctx, time.Second)
+		defer delCancel()
+		if err := mq.client.XDel(delCtx, streamName, msgID).Err(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // GetTopicInfo returns information about a topic's stream
