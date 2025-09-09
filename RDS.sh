@@ -30,7 +30,11 @@ show_help() {
     echo "  deps          - Install Go dependencies"
     echo "  setup         - Initial setup (create redis.conf)"
     echo "  protos        - Generate gRPC protobuf stubs"
-    echo "  run-grpc      - Run the gRPC server"
+    echo "  run-grpc      - Run the gRPC microservice"
+    echo "  run-microservice - Run the main gRPC microservice (same as run-grpc)"
+    echo "  client        - Run example gRPC client"
+    echo "  python-client - Run Python gRPC client"
+    echo "  python-test   - Run Python test script"
     echo "  debug         - Show debug information about streams and consumers"
     echo "  health        - Check the health of the Redis container"
     echo "  grafana       - Open Grafana dashboard in browser"
@@ -242,6 +246,42 @@ start_monitoring() {
     echo "- Redis Insight: http://localhost:5540"
 }
 
+# Run the main gRPC microservice
+run_microservice() {
+    install_deps
+    gen_protos
+    echo -e "${BLUE}Building gRPC microservice...${NC}"
+    go build -o ./bin/redis_streams_grpc .
+    echo -e "${BLUE}Starting gRPC microservice...${NC}"
+    CONFIG_PATH=${CONFIG_PATH:-Config/config.yml} ./bin/redis_streams_grpc --health-port 8083 ${GRPC_FLAGS:-}
+}
+
+# Run example gRPC client
+run_client() {
+    install_deps
+    gen_protos
+    echo -e "${BLUE}Building example client...${NC}"
+    go build -o ./bin/example_client ./examples/client
+    echo -e "${BLUE}Running example client...${NC}"
+    ./bin/example_client
+}
+
+# Run Python gRPC client
+run_python_client() {
+    echo -e "${BLUE}Running Python gRPC client...${NC}"
+    cd examples
+    ./run_python_client.sh
+    cd ..
+}
+
+# Run Python test
+run_python_test() {
+    echo -e "${BLUE}Running Python test...${NC}"
+    cd examples
+    python3 simple_test.py
+    cd ..
+}
+
 # Main command handler
 case "$1" in
     start)
@@ -283,6 +323,18 @@ case "$1" in
         ;;
     run-grpc)
         run_grpc
+        ;;
+    run-microservice)
+        run_microservice
+        ;;
+    client)
+        run_client
+        ;;
+    python-client)
+        run_python_client
+        ;;
+    python-test)
+        run_python_test
         ;;
     setup)
         setup_redis

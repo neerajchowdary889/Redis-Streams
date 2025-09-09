@@ -19,22 +19,39 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	RedisStreams_Publish_FullMethodName      = "/redisstreamspb.RedisStreams/Publish"
-	RedisStreams_PublishBatch_FullMethodName = "/redisstreamspb.RedisStreams/PublishBatch"
-	RedisStreams_Subscribe_FullMethodName    = "/redisstreamspb.RedisStreams/Subscribe"
-	RedisStreams_Ack_FullMethodName          = "/redisstreamspb.RedisStreams/Ack"
-	RedisStreams_ListTopics_FullMethodName   = "/redisstreamspb.RedisStreams/ListTopics"
+	RedisStreams_Publish_FullMethodName             = "/redisstreamspb.RedisStreams/Publish"
+	RedisStreams_PublishBatch_FullMethodName        = "/redisstreamspb.RedisStreams/PublishBatch"
+	RedisStreams_Subscribe_FullMethodName           = "/redisstreamspb.RedisStreams/Subscribe"
+	RedisStreams_ReadStream_FullMethodName          = "/redisstreamspb.RedisStreams/ReadStream"
+	RedisStreams_ReadRange_FullMethodName           = "/redisstreamspb.RedisStreams/ReadRange"
+	RedisStreams_Ack_FullMethodName                 = "/redisstreamspb.RedisStreams/Ack"
+	RedisStreams_ListTopics_FullMethodName          = "/redisstreamspb.RedisStreams/ListTopics"
+	RedisStreams_StreamInfo_FullMethodName          = "/redisstreamspb.RedisStreams/StreamInfo"
+	RedisStreams_ConsumerGroupInfo_FullMethodName   = "/redisstreamspb.RedisStreams/ConsumerGroupInfo"
+	RedisStreams_CreateConsumerGroup_FullMethodName = "/redisstreamspb.RedisStreams/CreateConsumerGroup"
+	RedisStreams_DeleteConsumerGroup_FullMethodName = "/redisstreamspb.RedisStreams/DeleteConsumerGroup"
 )
 
 // RedisStreamsClient is the client API for RedisStreams service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type RedisStreamsClient interface {
+	// Publishing
 	Publish(ctx context.Context, in *PublishRequest, opts ...grpc.CallOption) (*PublishResponse, error)
 	PublishBatch(ctx context.Context, in *PublishBatchRequest, opts ...grpc.CallOption) (*PublishBatchResponse, error)
+	// Consuming
 	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Message], error)
+	ReadStream(ctx context.Context, in *ReadStreamRequest, opts ...grpc.CallOption) (*ReadStreamResponse, error)
+	ReadRange(ctx context.Context, in *ReadRangeRequest, opts ...grpc.CallOption) (*ReadRangeResponse, error)
+	// Acknowledgment
 	Ack(ctx context.Context, in *AckRequest, opts ...grpc.CallOption) (*AckResponse, error)
+	// Topic Management
 	ListTopics(ctx context.Context, in *ListTopicsRequest, opts ...grpc.CallOption) (*ListTopicsResponse, error)
+	StreamInfo(ctx context.Context, in *StreamInfoRequest, opts ...grpc.CallOption) (*StreamInfoResponse, error)
+	ConsumerGroupInfo(ctx context.Context, in *ConsumerGroupInfoRequest, opts ...grpc.CallOption) (*ConsumerGroupInfoResponse, error)
+	// Consumer Group Management
+	CreateConsumerGroup(ctx context.Context, in *CreateConsumerGroupRequest, opts ...grpc.CallOption) (*CreateConsumerGroupResponse, error)
+	DeleteConsumerGroup(ctx context.Context, in *DeleteConsumerGroupRequest, opts ...grpc.CallOption) (*DeleteConsumerGroupResponse, error)
 }
 
 type redisStreamsClient struct {
@@ -84,6 +101,26 @@ func (c *redisStreamsClient) Subscribe(ctx context.Context, in *SubscribeRequest
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type RedisStreams_SubscribeClient = grpc.ServerStreamingClient[Message]
 
+func (c *redisStreamsClient) ReadStream(ctx context.Context, in *ReadStreamRequest, opts ...grpc.CallOption) (*ReadStreamResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReadStreamResponse)
+	err := c.cc.Invoke(ctx, RedisStreams_ReadStream_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *redisStreamsClient) ReadRange(ctx context.Context, in *ReadRangeRequest, opts ...grpc.CallOption) (*ReadRangeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReadRangeResponse)
+	err := c.cc.Invoke(ctx, RedisStreams_ReadRange_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *redisStreamsClient) Ack(ctx context.Context, in *AckRequest, opts ...grpc.CallOption) (*AckResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AckResponse)
@@ -104,15 +141,66 @@ func (c *redisStreamsClient) ListTopics(ctx context.Context, in *ListTopicsReque
 	return out, nil
 }
 
+func (c *redisStreamsClient) StreamInfo(ctx context.Context, in *StreamInfoRequest, opts ...grpc.CallOption) (*StreamInfoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StreamInfoResponse)
+	err := c.cc.Invoke(ctx, RedisStreams_StreamInfo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *redisStreamsClient) ConsumerGroupInfo(ctx context.Context, in *ConsumerGroupInfoRequest, opts ...grpc.CallOption) (*ConsumerGroupInfoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConsumerGroupInfoResponse)
+	err := c.cc.Invoke(ctx, RedisStreams_ConsumerGroupInfo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *redisStreamsClient) CreateConsumerGroup(ctx context.Context, in *CreateConsumerGroupRequest, opts ...grpc.CallOption) (*CreateConsumerGroupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateConsumerGroupResponse)
+	err := c.cc.Invoke(ctx, RedisStreams_CreateConsumerGroup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *redisStreamsClient) DeleteConsumerGroup(ctx context.Context, in *DeleteConsumerGroupRequest, opts ...grpc.CallOption) (*DeleteConsumerGroupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteConsumerGroupResponse)
+	err := c.cc.Invoke(ctx, RedisStreams_DeleteConsumerGroup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RedisStreamsServer is the server API for RedisStreams service.
 // All implementations must embed UnimplementedRedisStreamsServer
 // for forward compatibility.
 type RedisStreamsServer interface {
+	// Publishing
 	Publish(context.Context, *PublishRequest) (*PublishResponse, error)
 	PublishBatch(context.Context, *PublishBatchRequest) (*PublishBatchResponse, error)
+	// Consuming
 	Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[Message]) error
+	ReadStream(context.Context, *ReadStreamRequest) (*ReadStreamResponse, error)
+	ReadRange(context.Context, *ReadRangeRequest) (*ReadRangeResponse, error)
+	// Acknowledgment
 	Ack(context.Context, *AckRequest) (*AckResponse, error)
+	// Topic Management
 	ListTopics(context.Context, *ListTopicsRequest) (*ListTopicsResponse, error)
+	StreamInfo(context.Context, *StreamInfoRequest) (*StreamInfoResponse, error)
+	ConsumerGroupInfo(context.Context, *ConsumerGroupInfoRequest) (*ConsumerGroupInfoResponse, error)
+	// Consumer Group Management
+	CreateConsumerGroup(context.Context, *CreateConsumerGroupRequest) (*CreateConsumerGroupResponse, error)
+	DeleteConsumerGroup(context.Context, *DeleteConsumerGroupRequest) (*DeleteConsumerGroupResponse, error)
 	mustEmbedUnimplementedRedisStreamsServer()
 }
 
@@ -132,11 +220,29 @@ func (UnimplementedRedisStreamsServer) PublishBatch(context.Context, *PublishBat
 func (UnimplementedRedisStreamsServer) Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[Message]) error {
 	return status.Errorf(codes.Unimplemented, "method Subscribe not implemented")
 }
+func (UnimplementedRedisStreamsServer) ReadStream(context.Context, *ReadStreamRequest) (*ReadStreamResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReadStream not implemented")
+}
+func (UnimplementedRedisStreamsServer) ReadRange(context.Context, *ReadRangeRequest) (*ReadRangeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReadRange not implemented")
+}
 func (UnimplementedRedisStreamsServer) Ack(context.Context, *AckRequest) (*AckResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Ack not implemented")
 }
 func (UnimplementedRedisStreamsServer) ListTopics(context.Context, *ListTopicsRequest) (*ListTopicsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListTopics not implemented")
+}
+func (UnimplementedRedisStreamsServer) StreamInfo(context.Context, *StreamInfoRequest) (*StreamInfoResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StreamInfo not implemented")
+}
+func (UnimplementedRedisStreamsServer) ConsumerGroupInfo(context.Context, *ConsumerGroupInfoRequest) (*ConsumerGroupInfoResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ConsumerGroupInfo not implemented")
+}
+func (UnimplementedRedisStreamsServer) CreateConsumerGroup(context.Context, *CreateConsumerGroupRequest) (*CreateConsumerGroupResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateConsumerGroup not implemented")
+}
+func (UnimplementedRedisStreamsServer) DeleteConsumerGroup(context.Context, *DeleteConsumerGroupRequest) (*DeleteConsumerGroupResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteConsumerGroup not implemented")
 }
 func (UnimplementedRedisStreamsServer) mustEmbedUnimplementedRedisStreamsServer() {}
 func (UnimplementedRedisStreamsServer) testEmbeddedByValue()                      {}
@@ -206,6 +312,42 @@ func _RedisStreams_Subscribe_Handler(srv interface{}, stream grpc.ServerStream) 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type RedisStreams_SubscribeServer = grpc.ServerStreamingServer[Message]
 
+func _RedisStreams_ReadStream_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReadStreamRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RedisStreamsServer).ReadStream(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RedisStreams_ReadStream_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RedisStreamsServer).ReadStream(ctx, req.(*ReadStreamRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RedisStreams_ReadRange_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReadRangeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RedisStreamsServer).ReadRange(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RedisStreams_ReadRange_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RedisStreamsServer).ReadRange(ctx, req.(*ReadRangeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _RedisStreams_Ack_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AckRequest)
 	if err := dec(in); err != nil {
@@ -242,6 +384,78 @@ func _RedisStreams_ListTopics_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RedisStreams_StreamInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StreamInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RedisStreamsServer).StreamInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RedisStreams_StreamInfo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RedisStreamsServer).StreamInfo(ctx, req.(*StreamInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RedisStreams_ConsumerGroupInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConsumerGroupInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RedisStreamsServer).ConsumerGroupInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RedisStreams_ConsumerGroupInfo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RedisStreamsServer).ConsumerGroupInfo(ctx, req.(*ConsumerGroupInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RedisStreams_CreateConsumerGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateConsumerGroupRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RedisStreamsServer).CreateConsumerGroup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RedisStreams_CreateConsumerGroup_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RedisStreamsServer).CreateConsumerGroup(ctx, req.(*CreateConsumerGroupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RedisStreams_DeleteConsumerGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteConsumerGroupRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RedisStreamsServer).DeleteConsumerGroup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RedisStreams_DeleteConsumerGroup_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RedisStreamsServer).DeleteConsumerGroup(ctx, req.(*DeleteConsumerGroupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RedisStreams_ServiceDesc is the grpc.ServiceDesc for RedisStreams service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -258,12 +472,36 @@ var RedisStreams_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _RedisStreams_PublishBatch_Handler,
 		},
 		{
+			MethodName: "ReadStream",
+			Handler:    _RedisStreams_ReadStream_Handler,
+		},
+		{
+			MethodName: "ReadRange",
+			Handler:    _RedisStreams_ReadRange_Handler,
+		},
+		{
 			MethodName: "Ack",
 			Handler:    _RedisStreams_Ack_Handler,
 		},
 		{
 			MethodName: "ListTopics",
 			Handler:    _RedisStreams_ListTopics_Handler,
+		},
+		{
+			MethodName: "StreamInfo",
+			Handler:    _RedisStreams_StreamInfo_Handler,
+		},
+		{
+			MethodName: "ConsumerGroupInfo",
+			Handler:    _RedisStreams_ConsumerGroupInfo_Handler,
+		},
+		{
+			MethodName: "CreateConsumerGroup",
+			Handler:    _RedisStreams_CreateConsumerGroup_Handler,
+		},
+		{
+			MethodName: "DeleteConsumerGroup",
+			Handler:    _RedisStreams_DeleteConsumerGroup_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -603,6 +603,714 @@ func (x *ListTopicsResponse) GetNames() []string {
 	return nil
 }
 
+type ReadStreamRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Topic          string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
+	StartId        string                 `protobuf:"bytes,2,opt,name=start_id,json=startId,proto3" json:"start_id,omitempty"`                         // "0", "$", "1234567890-0", etc.
+	Count          int64                  `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`                                           // limit number of entries
+	BlockTimeoutMs int64                  `protobuf:"varint,4,opt,name=block_timeout_ms,json=blockTimeoutMs,proto3" json:"block_timeout_ms,omitempty"` // 0 for non-blocking
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ReadStreamRequest) Reset() {
+	*x = ReadStreamRequest{}
+	mi := &file_redis_streams_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadStreamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadStreamRequest) ProtoMessage() {}
+
+func (x *ReadStreamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_redis_streams_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadStreamRequest.ProtoReflect.Descriptor instead.
+func (*ReadStreamRequest) Descriptor() ([]byte, []int) {
+	return file_redis_streams_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ReadStreamRequest) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+func (x *ReadStreamRequest) GetStartId() string {
+	if x != nil {
+		return x.StartId
+	}
+	return ""
+}
+
+func (x *ReadStreamRequest) GetCount() int64 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+func (x *ReadStreamRequest) GetBlockTimeoutMs() int64 {
+	if x != nil {
+		return x.BlockTimeoutMs
+	}
+	return 0
+}
+
+type ReadStreamResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Messages      []*Message             `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	HasMore       bool                   `protobuf:"varint,2,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"` // true if there are more messages
+	LastId        string                 `protobuf:"bytes,3,opt,name=last_id,json=lastId,proto3" json:"last_id,omitempty"`     // last message ID for pagination
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReadStreamResponse) Reset() {
+	*x = ReadStreamResponse{}
+	mi := &file_redis_streams_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadStreamResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadStreamResponse) ProtoMessage() {}
+
+func (x *ReadStreamResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_redis_streams_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadStreamResponse.ProtoReflect.Descriptor instead.
+func (*ReadStreamResponse) Descriptor() ([]byte, []int) {
+	return file_redis_streams_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ReadStreamResponse) GetMessages() []*Message {
+	if x != nil {
+		return x.Messages
+	}
+	return nil
+}
+
+func (x *ReadStreamResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
+}
+
+func (x *ReadStreamResponse) GetLastId() string {
+	if x != nil {
+		return x.LastId
+	}
+	return ""
+}
+
+type ReadRangeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Topic         string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
+	StartId       string                 `protobuf:"bytes,2,opt,name=start_id,json=startId,proto3" json:"start_id,omitempty"` // inclusive
+	EndId         string                 `protobuf:"bytes,3,opt,name=end_id,json=endId,proto3" json:"end_id,omitempty"`       // inclusive, "+" for latest
+	Count         int64                  `protobuf:"varint,4,opt,name=count,proto3" json:"count,omitempty"`                   // limit number of entries
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReadRangeRequest) Reset() {
+	*x = ReadRangeRequest{}
+	mi := &file_redis_streams_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadRangeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadRangeRequest) ProtoMessage() {}
+
+func (x *ReadRangeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_redis_streams_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadRangeRequest.ProtoReflect.Descriptor instead.
+func (*ReadRangeRequest) Descriptor() ([]byte, []int) {
+	return file_redis_streams_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ReadRangeRequest) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+func (x *ReadRangeRequest) GetStartId() string {
+	if x != nil {
+		return x.StartId
+	}
+	return ""
+}
+
+func (x *ReadRangeRequest) GetEndId() string {
+	if x != nil {
+		return x.EndId
+	}
+	return ""
+}
+
+func (x *ReadRangeRequest) GetCount() int64 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+type ReadRangeResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Messages      []*Message             `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReadRangeResponse) Reset() {
+	*x = ReadRangeResponse{}
+	mi := &file_redis_streams_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadRangeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadRangeResponse) ProtoMessage() {}
+
+func (x *ReadRangeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_redis_streams_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadRangeResponse.ProtoReflect.Descriptor instead.
+func (*ReadRangeResponse) Descriptor() ([]byte, []int) {
+	return file_redis_streams_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ReadRangeResponse) GetMessages() []*Message {
+	if x != nil {
+		return x.Messages
+	}
+	return nil
+}
+
+type StreamInfoRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Topic         string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamInfoRequest) Reset() {
+	*x = StreamInfoRequest{}
+	mi := &file_redis_streams_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamInfoRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamInfoRequest) ProtoMessage() {}
+
+func (x *StreamInfoRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_redis_streams_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamInfoRequest.ProtoReflect.Descriptor instead.
+func (*StreamInfoRequest) Descriptor() ([]byte, []int) {
+	return file_redis_streams_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *StreamInfoRequest) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+type StreamInfoResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Length        int64                  `protobuf:"varint,1,opt,name=length,proto3" json:"length,omitempty"`
+	FirstEntryId  string                 `protobuf:"bytes,2,opt,name=first_entry_id,json=firstEntryId,proto3" json:"first_entry_id,omitempty"`
+	LastEntryId   string                 `protobuf:"bytes,3,opt,name=last_entry_id,json=lastEntryId,proto3" json:"last_entry_id,omitempty"`
+	EntriesAdded  int64                  `protobuf:"varint,4,opt,name=entries_added,json=entriesAdded,proto3" json:"entries_added,omitempty"`
+	Groups        int64                  `protobuf:"varint,5,opt,name=groups,proto3" json:"groups,omitempty"`
+	Consumers     int64                  `protobuf:"varint,6,opt,name=consumers,proto3" json:"consumers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamInfoResponse) Reset() {
+	*x = StreamInfoResponse{}
+	mi := &file_redis_streams_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamInfoResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamInfoResponse) ProtoMessage() {}
+
+func (x *StreamInfoResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_redis_streams_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamInfoResponse.ProtoReflect.Descriptor instead.
+func (*StreamInfoResponse) Descriptor() ([]byte, []int) {
+	return file_redis_streams_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *StreamInfoResponse) GetLength() int64 {
+	if x != nil {
+		return x.Length
+	}
+	return 0
+}
+
+func (x *StreamInfoResponse) GetFirstEntryId() string {
+	if x != nil {
+		return x.FirstEntryId
+	}
+	return ""
+}
+
+func (x *StreamInfoResponse) GetLastEntryId() string {
+	if x != nil {
+		return x.LastEntryId
+	}
+	return ""
+}
+
+func (x *StreamInfoResponse) GetEntriesAdded() int64 {
+	if x != nil {
+		return x.EntriesAdded
+	}
+	return 0
+}
+
+func (x *StreamInfoResponse) GetGroups() int64 {
+	if x != nil {
+		return x.Groups
+	}
+	return 0
+}
+
+func (x *StreamInfoResponse) GetConsumers() int64 {
+	if x != nil {
+		return x.Consumers
+	}
+	return 0
+}
+
+type ConsumerGroupInfoRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Topic         string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConsumerGroupInfoRequest) Reset() {
+	*x = ConsumerGroupInfoRequest{}
+	mi := &file_redis_streams_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConsumerGroupInfoRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConsumerGroupInfoRequest) ProtoMessage() {}
+
+func (x *ConsumerGroupInfoRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_redis_streams_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConsumerGroupInfoRequest.ProtoReflect.Descriptor instead.
+func (*ConsumerGroupInfoRequest) Descriptor() ([]byte, []int) {
+	return file_redis_streams_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ConsumerGroupInfoRequest) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+type ConsumerGroupInfo struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Consumers       int64                  `protobuf:"varint,2,opt,name=consumers,proto3" json:"consumers,omitempty"`
+	Pending         int64                  `protobuf:"varint,3,opt,name=pending,proto3" json:"pending,omitempty"`
+	LastDeliveredId string                 `protobuf:"bytes,4,opt,name=last_delivered_id,json=lastDeliveredId,proto3" json:"last_delivered_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ConsumerGroupInfo) Reset() {
+	*x = ConsumerGroupInfo{}
+	mi := &file_redis_streams_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConsumerGroupInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConsumerGroupInfo) ProtoMessage() {}
+
+func (x *ConsumerGroupInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_redis_streams_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConsumerGroupInfo.ProtoReflect.Descriptor instead.
+func (*ConsumerGroupInfo) Descriptor() ([]byte, []int) {
+	return file_redis_streams_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ConsumerGroupInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ConsumerGroupInfo) GetConsumers() int64 {
+	if x != nil {
+		return x.Consumers
+	}
+	return 0
+}
+
+func (x *ConsumerGroupInfo) GetPending() int64 {
+	if x != nil {
+		return x.Pending
+	}
+	return 0
+}
+
+func (x *ConsumerGroupInfo) GetLastDeliveredId() string {
+	if x != nil {
+		return x.LastDeliveredId
+	}
+	return ""
+}
+
+type ConsumerGroupInfoResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Groups        []*ConsumerGroupInfo   `protobuf:"bytes,1,rep,name=groups,proto3" json:"groups,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConsumerGroupInfoResponse) Reset() {
+	*x = ConsumerGroupInfoResponse{}
+	mi := &file_redis_streams_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConsumerGroupInfoResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConsumerGroupInfoResponse) ProtoMessage() {}
+
+func (x *ConsumerGroupInfoResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_redis_streams_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConsumerGroupInfoResponse.ProtoReflect.Descriptor instead.
+func (*ConsumerGroupInfoResponse) Descriptor() ([]byte, []int) {
+	return file_redis_streams_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ConsumerGroupInfoResponse) GetGroups() []*ConsumerGroupInfo {
+	if x != nil {
+		return x.Groups
+	}
+	return nil
+}
+
+type CreateConsumerGroupRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Topic         string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
+	GroupName     string                 `protobuf:"bytes,2,opt,name=group_name,json=groupName,proto3" json:"group_name,omitempty"`
+	StartId       string                 `protobuf:"bytes,3,opt,name=start_id,json=startId,proto3" json:"start_id,omitempty"` // "$" for new messages, "0" for all
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateConsumerGroupRequest) Reset() {
+	*x = CreateConsumerGroupRequest{}
+	mi := &file_redis_streams_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateConsumerGroupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateConsumerGroupRequest) ProtoMessage() {}
+
+func (x *CreateConsumerGroupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_redis_streams_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateConsumerGroupRequest.ProtoReflect.Descriptor instead.
+func (*CreateConsumerGroupRequest) Descriptor() ([]byte, []int) {
+	return file_redis_streams_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *CreateConsumerGroupRequest) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+func (x *CreateConsumerGroupRequest) GetGroupName() string {
+	if x != nil {
+		return x.GroupName
+	}
+	return ""
+}
+
+func (x *CreateConsumerGroupRequest) GetStartId() string {
+	if x != nil {
+		return x.StartId
+	}
+	return ""
+}
+
+type CreateConsumerGroupResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateConsumerGroupResponse) Reset() {
+	*x = CreateConsumerGroupResponse{}
+	mi := &file_redis_streams_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateConsumerGroupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateConsumerGroupResponse) ProtoMessage() {}
+
+func (x *CreateConsumerGroupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_redis_streams_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateConsumerGroupResponse.ProtoReflect.Descriptor instead.
+func (*CreateConsumerGroupResponse) Descriptor() ([]byte, []int) {
+	return file_redis_streams_proto_rawDescGZIP(), []int{21}
+}
+
+type DeleteConsumerGroupRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Topic         string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
+	GroupName     string                 `protobuf:"bytes,2,opt,name=group_name,json=groupName,proto3" json:"group_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteConsumerGroupRequest) Reset() {
+	*x = DeleteConsumerGroupRequest{}
+	mi := &file_redis_streams_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteConsumerGroupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteConsumerGroupRequest) ProtoMessage() {}
+
+func (x *DeleteConsumerGroupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_redis_streams_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteConsumerGroupRequest.ProtoReflect.Descriptor instead.
+func (*DeleteConsumerGroupRequest) Descriptor() ([]byte, []int) {
+	return file_redis_streams_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *DeleteConsumerGroupRequest) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+func (x *DeleteConsumerGroupRequest) GetGroupName() string {
+	if x != nil {
+		return x.GroupName
+	}
+	return ""
+}
+
+type DeleteConsumerGroupResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteConsumerGroupResponse) Reset() {
+	*x = DeleteConsumerGroupResponse{}
+	mi := &file_redis_streams_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteConsumerGroupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteConsumerGroupResponse) ProtoMessage() {}
+
+func (x *DeleteConsumerGroupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_redis_streams_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteConsumerGroupResponse.ProtoReflect.Descriptor instead.
+func (*DeleteConsumerGroupResponse) Descriptor() ([]byte, []int) {
+	return file_redis_streams_proto_rawDescGZIP(), []int{23}
+}
+
 var File_redis_streams_proto protoreflect.FileDescriptor
 
 const file_redis_streams_proto_rawDesc = "" +
@@ -647,14 +1355,67 @@ const file_redis_streams_proto_rawDesc = "" +
 	"\vAckResponse\"\x13\n" +
 	"\x11ListTopicsRequest\"*\n" +
 	"\x12ListTopicsResponse\x12\x14\n" +
-	"\x05names\x18\x01 \x03(\tR\x05names2\x94\x03\n" +
+	"\x05names\x18\x01 \x03(\tR\x05names\"\x84\x01\n" +
+	"\x11ReadStreamRequest\x12\x14\n" +
+	"\x05topic\x18\x01 \x01(\tR\x05topic\x12\x19\n" +
+	"\bstart_id\x18\x02 \x01(\tR\astartId\x12\x14\n" +
+	"\x05count\x18\x03 \x01(\x03R\x05count\x12(\n" +
+	"\x10block_timeout_ms\x18\x04 \x01(\x03R\x0eblockTimeoutMs\"}\n" +
+	"\x12ReadStreamResponse\x123\n" +
+	"\bmessages\x18\x01 \x03(\v2\x17.redisstreamspb.MessageR\bmessages\x12\x19\n" +
+	"\bhas_more\x18\x02 \x01(\bR\ahasMore\x12\x17\n" +
+	"\alast_id\x18\x03 \x01(\tR\x06lastId\"p\n" +
+	"\x10ReadRangeRequest\x12\x14\n" +
+	"\x05topic\x18\x01 \x01(\tR\x05topic\x12\x19\n" +
+	"\bstart_id\x18\x02 \x01(\tR\astartId\x12\x15\n" +
+	"\x06end_id\x18\x03 \x01(\tR\x05endId\x12\x14\n" +
+	"\x05count\x18\x04 \x01(\x03R\x05count\"H\n" +
+	"\x11ReadRangeResponse\x123\n" +
+	"\bmessages\x18\x01 \x03(\v2\x17.redisstreamspb.MessageR\bmessages\")\n" +
+	"\x11StreamInfoRequest\x12\x14\n" +
+	"\x05topic\x18\x01 \x01(\tR\x05topic\"\xd1\x01\n" +
+	"\x12StreamInfoResponse\x12\x16\n" +
+	"\x06length\x18\x01 \x01(\x03R\x06length\x12$\n" +
+	"\x0efirst_entry_id\x18\x02 \x01(\tR\ffirstEntryId\x12\"\n" +
+	"\rlast_entry_id\x18\x03 \x01(\tR\vlastEntryId\x12#\n" +
+	"\rentries_added\x18\x04 \x01(\x03R\fentriesAdded\x12\x16\n" +
+	"\x06groups\x18\x05 \x01(\x03R\x06groups\x12\x1c\n" +
+	"\tconsumers\x18\x06 \x01(\x03R\tconsumers\"0\n" +
+	"\x18ConsumerGroupInfoRequest\x12\x14\n" +
+	"\x05topic\x18\x01 \x01(\tR\x05topic\"\x8b\x01\n" +
+	"\x11ConsumerGroupInfo\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
+	"\tconsumers\x18\x02 \x01(\x03R\tconsumers\x12\x18\n" +
+	"\apending\x18\x03 \x01(\x03R\apending\x12*\n" +
+	"\x11last_delivered_id\x18\x04 \x01(\tR\x0flastDeliveredId\"V\n" +
+	"\x19ConsumerGroupInfoResponse\x129\n" +
+	"\x06groups\x18\x01 \x03(\v2!.redisstreamspb.ConsumerGroupInfoR\x06groups\"l\n" +
+	"\x1aCreateConsumerGroupRequest\x12\x14\n" +
+	"\x05topic\x18\x01 \x01(\tR\x05topic\x12\x1d\n" +
+	"\n" +
+	"group_name\x18\x02 \x01(\tR\tgroupName\x12\x19\n" +
+	"\bstart_id\x18\x03 \x01(\tR\astartId\"\x1d\n" +
+	"\x1bCreateConsumerGroupResponse\"Q\n" +
+	"\x1aDeleteConsumerGroupRequest\x12\x14\n" +
+	"\x05topic\x18\x01 \x01(\tR\x05topic\x12\x1d\n" +
+	"\n" +
+	"group_name\x18\x02 \x01(\tR\tgroupName\"\x1d\n" +
+	"\x1bDeleteConsumerGroupResponse2\xda\a\n" +
 	"\fRedisStreams\x12J\n" +
 	"\aPublish\x12\x1e.redisstreamspb.PublishRequest\x1a\x1f.redisstreamspb.PublishResponse\x12Y\n" +
 	"\fPublishBatch\x12#.redisstreamspb.PublishBatchRequest\x1a$.redisstreamspb.PublishBatchResponse\x12H\n" +
-	"\tSubscribe\x12 .redisstreamspb.SubscribeRequest\x1a\x17.redisstreamspb.Message0\x01\x12>\n" +
+	"\tSubscribe\x12 .redisstreamspb.SubscribeRequest\x1a\x17.redisstreamspb.Message0\x01\x12S\n" +
+	"\n" +
+	"ReadStream\x12!.redisstreamspb.ReadStreamRequest\x1a\".redisstreamspb.ReadStreamResponse\x12P\n" +
+	"\tReadRange\x12 .redisstreamspb.ReadRangeRequest\x1a!.redisstreamspb.ReadRangeResponse\x12>\n" +
 	"\x03Ack\x12\x1a.redisstreamspb.AckRequest\x1a\x1b.redisstreamspb.AckResponse\x12S\n" +
 	"\n" +
-	"ListTopics\x12!.redisstreamspb.ListTopicsRequest\x1a\".redisstreamspb.ListTopicsResponseB'Z%RedisStreams/api/proto;redisstreamspbb\x06proto3"
+	"ListTopics\x12!.redisstreamspb.ListTopicsRequest\x1a\".redisstreamspb.ListTopicsResponse\x12S\n" +
+	"\n" +
+	"StreamInfo\x12!.redisstreamspb.StreamInfoRequest\x1a\".redisstreamspb.StreamInfoResponse\x12h\n" +
+	"\x11ConsumerGroupInfo\x12(.redisstreamspb.ConsumerGroupInfoRequest\x1a).redisstreamspb.ConsumerGroupInfoResponse\x12n\n" +
+	"\x13CreateConsumerGroup\x12*.redisstreamspb.CreateConsumerGroupRequest\x1a+.redisstreamspb.CreateConsumerGroupResponse\x12n\n" +
+	"\x13DeleteConsumerGroup\x12*.redisstreamspb.DeleteConsumerGroupRequest\x1a+.redisstreamspb.DeleteConsumerGroupResponseB'Z%RedisStreams/api/proto;redisstreamspbb\x06proto3"
 
 var (
 	file_redis_streams_proto_rawDescOnce sync.Once
@@ -668,43 +1429,71 @@ func file_redis_streams_proto_rawDescGZIP() []byte {
 	return file_redis_streams_proto_rawDescData
 }
 
-var file_redis_streams_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_redis_streams_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_redis_streams_proto_goTypes = []any{
-	(*PublishRequest)(nil),       // 0: redisstreamspb.PublishRequest
-	(*PublishResponse)(nil),      // 1: redisstreamspb.PublishResponse
-	(*BatchMessage)(nil),         // 2: redisstreamspb.BatchMessage
-	(*PublishBatchRequest)(nil),  // 3: redisstreamspb.PublishBatchRequest
-	(*PublishBatchResponse)(nil), // 4: redisstreamspb.PublishBatchResponse
-	(*SubscribeRequest)(nil),     // 5: redisstreamspb.SubscribeRequest
-	(*Message)(nil),              // 6: redisstreamspb.Message
-	(*AckRequest)(nil),           // 7: redisstreamspb.AckRequest
-	(*AckResponse)(nil),          // 8: redisstreamspb.AckResponse
-	(*ListTopicsRequest)(nil),    // 9: redisstreamspb.ListTopicsRequest
-	(*ListTopicsResponse)(nil),   // 10: redisstreamspb.ListTopicsResponse
-	nil,                          // 11: redisstreamspb.PublishRequest.HeadersEntry
-	(*structpb.Struct)(nil),      // 12: google.protobuf.Struct
+	(*PublishRequest)(nil),              // 0: redisstreamspb.PublishRequest
+	(*PublishResponse)(nil),             // 1: redisstreamspb.PublishResponse
+	(*BatchMessage)(nil),                // 2: redisstreamspb.BatchMessage
+	(*PublishBatchRequest)(nil),         // 3: redisstreamspb.PublishBatchRequest
+	(*PublishBatchResponse)(nil),        // 4: redisstreamspb.PublishBatchResponse
+	(*SubscribeRequest)(nil),            // 5: redisstreamspb.SubscribeRequest
+	(*Message)(nil),                     // 6: redisstreamspb.Message
+	(*AckRequest)(nil),                  // 7: redisstreamspb.AckRequest
+	(*AckResponse)(nil),                 // 8: redisstreamspb.AckResponse
+	(*ListTopicsRequest)(nil),           // 9: redisstreamspb.ListTopicsRequest
+	(*ListTopicsResponse)(nil),          // 10: redisstreamspb.ListTopicsResponse
+	(*ReadStreamRequest)(nil),           // 11: redisstreamspb.ReadStreamRequest
+	(*ReadStreamResponse)(nil),          // 12: redisstreamspb.ReadStreamResponse
+	(*ReadRangeRequest)(nil),            // 13: redisstreamspb.ReadRangeRequest
+	(*ReadRangeResponse)(nil),           // 14: redisstreamspb.ReadRangeResponse
+	(*StreamInfoRequest)(nil),           // 15: redisstreamspb.StreamInfoRequest
+	(*StreamInfoResponse)(nil),          // 16: redisstreamspb.StreamInfoResponse
+	(*ConsumerGroupInfoRequest)(nil),    // 17: redisstreamspb.ConsumerGroupInfoRequest
+	(*ConsumerGroupInfo)(nil),           // 18: redisstreamspb.ConsumerGroupInfo
+	(*ConsumerGroupInfoResponse)(nil),   // 19: redisstreamspb.ConsumerGroupInfoResponse
+	(*CreateConsumerGroupRequest)(nil),  // 20: redisstreamspb.CreateConsumerGroupRequest
+	(*CreateConsumerGroupResponse)(nil), // 21: redisstreamspb.CreateConsumerGroupResponse
+	(*DeleteConsumerGroupRequest)(nil),  // 22: redisstreamspb.DeleteConsumerGroupRequest
+	(*DeleteConsumerGroupResponse)(nil), // 23: redisstreamspb.DeleteConsumerGroupResponse
+	nil,                                 // 24: redisstreamspb.PublishRequest.HeadersEntry
+	(*structpb.Struct)(nil),             // 25: google.protobuf.Struct
 }
 var file_redis_streams_proto_depIdxs = []int32{
-	12, // 0: redisstreamspb.PublishRequest.json:type_name -> google.protobuf.Struct
-	11, // 1: redisstreamspb.PublishRequest.headers:type_name -> redisstreamspb.PublishRequest.HeadersEntry
-	12, // 2: redisstreamspb.BatchMessage.fields:type_name -> google.protobuf.Struct
+	25, // 0: redisstreamspb.PublishRequest.json:type_name -> google.protobuf.Struct
+	24, // 1: redisstreamspb.PublishRequest.headers:type_name -> redisstreamspb.PublishRequest.HeadersEntry
+	25, // 2: redisstreamspb.BatchMessage.fields:type_name -> google.protobuf.Struct
 	2,  // 3: redisstreamspb.PublishBatchRequest.messages:type_name -> redisstreamspb.BatchMessage
-	12, // 4: redisstreamspb.Message.fields:type_name -> google.protobuf.Struct
-	0,  // 5: redisstreamspb.RedisStreams.Publish:input_type -> redisstreamspb.PublishRequest
-	3,  // 6: redisstreamspb.RedisStreams.PublishBatch:input_type -> redisstreamspb.PublishBatchRequest
-	5,  // 7: redisstreamspb.RedisStreams.Subscribe:input_type -> redisstreamspb.SubscribeRequest
-	7,  // 8: redisstreamspb.RedisStreams.Ack:input_type -> redisstreamspb.AckRequest
-	9,  // 9: redisstreamspb.RedisStreams.ListTopics:input_type -> redisstreamspb.ListTopicsRequest
-	1,  // 10: redisstreamspb.RedisStreams.Publish:output_type -> redisstreamspb.PublishResponse
-	4,  // 11: redisstreamspb.RedisStreams.PublishBatch:output_type -> redisstreamspb.PublishBatchResponse
-	6,  // 12: redisstreamspb.RedisStreams.Subscribe:output_type -> redisstreamspb.Message
-	8,  // 13: redisstreamspb.RedisStreams.Ack:output_type -> redisstreamspb.AckResponse
-	10, // 14: redisstreamspb.RedisStreams.ListTopics:output_type -> redisstreamspb.ListTopicsResponse
-	10, // [10:15] is the sub-list for method output_type
-	5,  // [5:10] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	25, // 4: redisstreamspb.Message.fields:type_name -> google.protobuf.Struct
+	6,  // 5: redisstreamspb.ReadStreamResponse.messages:type_name -> redisstreamspb.Message
+	6,  // 6: redisstreamspb.ReadRangeResponse.messages:type_name -> redisstreamspb.Message
+	18, // 7: redisstreamspb.ConsumerGroupInfoResponse.groups:type_name -> redisstreamspb.ConsumerGroupInfo
+	0,  // 8: redisstreamspb.RedisStreams.Publish:input_type -> redisstreamspb.PublishRequest
+	3,  // 9: redisstreamspb.RedisStreams.PublishBatch:input_type -> redisstreamspb.PublishBatchRequest
+	5,  // 10: redisstreamspb.RedisStreams.Subscribe:input_type -> redisstreamspb.SubscribeRequest
+	11, // 11: redisstreamspb.RedisStreams.ReadStream:input_type -> redisstreamspb.ReadStreamRequest
+	13, // 12: redisstreamspb.RedisStreams.ReadRange:input_type -> redisstreamspb.ReadRangeRequest
+	7,  // 13: redisstreamspb.RedisStreams.Ack:input_type -> redisstreamspb.AckRequest
+	9,  // 14: redisstreamspb.RedisStreams.ListTopics:input_type -> redisstreamspb.ListTopicsRequest
+	15, // 15: redisstreamspb.RedisStreams.StreamInfo:input_type -> redisstreamspb.StreamInfoRequest
+	17, // 16: redisstreamspb.RedisStreams.ConsumerGroupInfo:input_type -> redisstreamspb.ConsumerGroupInfoRequest
+	20, // 17: redisstreamspb.RedisStreams.CreateConsumerGroup:input_type -> redisstreamspb.CreateConsumerGroupRequest
+	22, // 18: redisstreamspb.RedisStreams.DeleteConsumerGroup:input_type -> redisstreamspb.DeleteConsumerGroupRequest
+	1,  // 19: redisstreamspb.RedisStreams.Publish:output_type -> redisstreamspb.PublishResponse
+	4,  // 20: redisstreamspb.RedisStreams.PublishBatch:output_type -> redisstreamspb.PublishBatchResponse
+	6,  // 21: redisstreamspb.RedisStreams.Subscribe:output_type -> redisstreamspb.Message
+	12, // 22: redisstreamspb.RedisStreams.ReadStream:output_type -> redisstreamspb.ReadStreamResponse
+	14, // 23: redisstreamspb.RedisStreams.ReadRange:output_type -> redisstreamspb.ReadRangeResponse
+	8,  // 24: redisstreamspb.RedisStreams.Ack:output_type -> redisstreamspb.AckResponse
+	10, // 25: redisstreamspb.RedisStreams.ListTopics:output_type -> redisstreamspb.ListTopicsResponse
+	16, // 26: redisstreamspb.RedisStreams.StreamInfo:output_type -> redisstreamspb.StreamInfoResponse
+	19, // 27: redisstreamspb.RedisStreams.ConsumerGroupInfo:output_type -> redisstreamspb.ConsumerGroupInfoResponse
+	21, // 28: redisstreamspb.RedisStreams.CreateConsumerGroup:output_type -> redisstreamspb.CreateConsumerGroupResponse
+	23, // 29: redisstreamspb.RedisStreams.DeleteConsumerGroup:output_type -> redisstreamspb.DeleteConsumerGroupResponse
+	19, // [19:30] is the sub-list for method output_type
+	8,  // [8:19] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_redis_streams_proto_init() }
@@ -718,7 +1507,7 @@ func file_redis_streams_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_redis_streams_proto_rawDesc), len(file_redis_streams_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

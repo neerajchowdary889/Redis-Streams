@@ -59,12 +59,94 @@ message ListTopicsResponse {
   repeated string names = 1;
 }
 
+message ReadStreamRequest {
+  string topic = 1;
+  string start_id = 2; // "0", "$", "1234567890-0", etc.
+  int64 count = 3; // limit number of entries
+  int64 block_timeout_ms = 4; // 0 for non-blocking
+}
+
+message ReadStreamResponse {
+  repeated Message messages = 1;
+  bool has_more = 2; // true if there are more messages
+  string last_id = 3; // last message ID for pagination
+}
+
+message ReadRangeRequest {
+  string topic = 1;
+  string start_id = 2; // inclusive
+  string end_id = 3; // inclusive, "+" for latest
+  int64 count = 4; // limit number of entries
+}
+
+message ReadRangeResponse {
+  repeated Message messages = 1;
+}
+
+message StreamInfoRequest {
+  string topic = 1;
+}
+
+message StreamInfoResponse {
+  int64 length = 1;
+  string first_entry_id = 2;
+  string last_entry_id = 3;
+  int64 entries_added = 4;
+  int64 groups = 5;
+  int64 consumers = 6;
+}
+
+message ConsumerGroupInfoRequest {
+  string topic = 1;
+}
+
+message ConsumerGroupInfo {
+  string name = 1;
+  int64 consumers = 2;
+  int64 pending = 3;
+  string last_delivered_id = 4;
+}
+
+message ConsumerGroupInfoResponse {
+  repeated ConsumerGroupInfo groups = 1;
+}
+
+message CreateConsumerGroupRequest {
+  string topic = 1;
+  string group_name = 2;
+  string start_id = 3; // "$" for new messages, "0" for all
+}
+
+message CreateConsumerGroupResponse {}
+
+message DeleteConsumerGroupRequest {
+  string topic = 1;
+  string group_name = 2;
+}
+
+message DeleteConsumerGroupResponse {}
+
 service RedisStreams {
+  // Publishing
   rpc Publish(PublishRequest) returns (PublishResponse);
   rpc PublishBatch(PublishBatchRequest) returns (PublishBatchResponse);
+  
+  // Consuming
   rpc Subscribe(SubscribeRequest) returns (stream Message);
+  rpc ReadStream(ReadStreamRequest) returns (ReadStreamResponse);
+  rpc ReadRange(ReadRangeRequest) returns (ReadRangeResponse);
+  
+  // Acknowledgment
   rpc Ack(AckRequest) returns (AckResponse);
+  
+  // Topic Management
   rpc ListTopics(ListTopicsRequest) returns (ListTopicsResponse);
+  rpc StreamInfo(StreamInfoRequest) returns (StreamInfoResponse);
+  rpc ConsumerGroupInfo(ConsumerGroupInfoRequest) returns (ConsumerGroupInfoResponse);
+  
+  // Consumer Group Management
+  rpc CreateConsumerGroup(CreateConsumerGroupRequest) returns (CreateConsumerGroupResponse);
+  rpc DeleteConsumerGroup(DeleteConsumerGroupRequest) returns (DeleteConsumerGroupResponse);
 }
 
 

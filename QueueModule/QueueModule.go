@@ -683,7 +683,7 @@ func (mq *RedisStreamMQ) Close() error {
 	// Signal all consumers to stop
 	mq.mu.Lock()
 	for _, consumer := range mq.activeConsumers {
-if consumer.IsRunning {
+		if consumer.IsRunning {
 			close(consumer.StopChan)
 			consumer.IsRunning = false
 		}
@@ -750,4 +750,9 @@ func (mq *RedisStreamMQ) StopConsumer(topicName, consumerName string) error {
 	mq.logger.Info("Consumer stopped",
 		"topic", topicName, "consumer", consumerName)
 	return nil
+}
+
+// GetRedisClient returns the underlying Redis client for direct operations
+func (mq *RedisStreamMQ) GetRedisClient() *redis.Client {
+	return mq.client
 }
