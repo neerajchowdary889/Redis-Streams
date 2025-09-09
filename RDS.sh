@@ -30,7 +30,6 @@ show_help() {
     echo "  deps          - Install Go dependencies"
     echo "  setup         - Initial setup (create redis.conf)"
     echo "  protos        - Generate gRPC protobuf stubs"
-    echo "  run-grpc      - Run the gRPC microservice"
     echo "  run-microservice - Run the main gRPC microservice (same as run-grpc)"
     echo "  client        - Run example gRPC client"
     echo "  python-client - Run Python gRPC client"
@@ -117,16 +116,6 @@ gen_protos() {
       --go-grpc_out=paths=source_relative:"$PROTO_DIR" \
       "$PROTO_DIR/redis_streams.proto"
     echo -e "${GREEN}Protobuf generation completed.${NC}"
-}
-
-# Run gRPC server
-run_grpc() {
-    install_deps
-    gen_protos
-    echo -e "${BLUE}Building gRPC server...${NC}"
-    go build -o ./bin/redis_streams_grpc ./cmd/grpc-server
-    echo -e "${BLUE}Starting gRPC server...${NC}"
-    CONFIG_PATH=${CONFIG_PATH:-Config/config.yml} ./bin/redis_streams_grpc ${GRPC_FLAGS:-}
 }
 
 # Run tests
