@@ -1,13 +1,6 @@
 # Redis Streams MQ (Reusable Module)
 Reusable Redis Streams message queue module for Go microservices. Works as a library you can import across projects, with pluggable logging and config-driven topics.
 
-## Install
-
-Add to your `go.mod` (module name is `RedisStreams`):
-
-```bash
-go get RedisStreams
-```
 
 ## Quick start
 
