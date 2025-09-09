@@ -33,6 +33,8 @@ show_help() {
     echo "  run-grpc      - Run the gRPC server"
     echo "  debug         - Show debug information about streams and consumers"
     echo "  health        - Check the health of the Redis container"
+    echo "  grafana       - Open Grafana dashboard in browser"
+    echo "  monitoring    - Start all monitoring services (Redis, Prometheus, Grafana)"
     echo "  help          - Show this help message"
 }
 
@@ -43,7 +45,9 @@ start_services() {
     echo -e "${GREEN}Services started.${NC}"
     echo "- Redis available at localhost:6379"
     echo "- Redis Commander available at http://localhost:8081"
-    echo "- Redis Insight available at http://localhost:8001"
+    echo "- Redis Insight available at http://localhost:5540"
+    echo "- Prometheus available at http://localhost:9090"
+    echo "- Grafana available at http://localhost:3000 (admin/admin123)"
 }
 
 # Stop services
@@ -203,6 +207,41 @@ check_health() {
     docker exec -it $REDIS_CONTAINER redis-cli info server | grep -E 'redis_version|tcp_port|uptime_in_seconds'
 }
 
+# Open Grafana dashboard
+open_grafana() {
+    echo -e "${BLUE}Opening Grafana dashboard...${NC}"
+    if command -v open >/dev/null 2>&1; then
+        open http://localhost:3000
+    elif command -v xdg-open >/dev/null 2>&1; then
+        xdg-open http://localhost:3000
+    else
+        echo "Please open http://localhost:3000 in your browser"
+        echo "Login: admin / admin123"
+    fi
+}
+
+# Open Prometheus metrics
+open_prometheus() {
+    echo -e "${BLUE}Opening Prometheus metrics...${NC}"
+    if command -v open >/dev/null 2>&1; then
+        open http://localhost:9090
+    elif command -v xdg-open >/dev/null 2>&1; then
+        xdg-open http://localhost:9090
+    else
+        echo "Please open http://localhost:9090 in your browser"
+    fi
+}
+
+# Start monitoring services
+start_monitoring() {
+    echo -e "${BLUE}Starting monitoring services...${NC}"
+    $DOCKER_COMPOSE up -d redis prometheus grafana
+    echo -e "${GREEN}Monitoring services started.${NC}"
+    echo "- Prometheus: http://localhost:9090"
+    echo "- Grafana: http://localhost:3000 (admin/admin123)"
+    echo "- Redis Insight: http://localhost:5540"
+}
+
 # Main command handler
 case "$1" in
     start)
@@ -256,6 +295,12 @@ case "$1" in
         ;;
     health)
         check_health
+        ;;
+    grafana)
+        open_grafana
+        ;;
+    monitoring)
+        start_monitoring
         ;;
     help|*)
         show_help

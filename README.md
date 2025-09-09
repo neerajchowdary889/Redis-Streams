@@ -73,6 +73,9 @@ Use the helper script for local dev and gRPC service:
 - run-grpc: build and run the gRPC server (`cmd/grpc-server`)
 - debug: basic stream introspection helpers
 - health: check container health
+- grafana: open Grafana dashboard in browser
+- prometheus: open Prometheus metrics in browser
+- monitoring: start all monitoring services (Redis, Prometheus, Grafana)
 
 Examples:
 
@@ -80,4 +83,22 @@ Examples:
 ./RDS.sh protos
 ./RDS.sh run-grpc                       # uses Config/config.yml by default
 CONFIG_PATH=Config/config.yml ./RDS.sh run-grpc -- --port 9090
+./RDS.sh monitoring                     # start monitoring stack
+./RDS.sh grafana                        # open Grafana dashboard
 ```
+
+## Monitoring & Observability
+
+Complete monitoring stack with Prometheus and Grafana:
+
+- **Grafana Dashboard**: http://localhost:3000 (admin/admin123)
+- **Prometheus Metrics**: http://localhost:9090
+- **Redis Insight**: http://localhost:5540
+
+The dashboard includes:
+- Message throughput (publish/consume rates)
+- Stream lengths and processing performance
+- Error rates and connection health
+- Service uptime and total message counts
+
+See `monitoring/README.md` for detailed setup and customization.
