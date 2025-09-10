@@ -1,8 +1,8 @@
 redis:
-  host: ${REDIS_HOST:-localhost}
-  port: ${REDIS_PORT:-6379}
-  password: ${REDIS_PASSWORD:-}
-  database: ${REDIS_DATABASE:-0}
+  host: 0.0.0.0
+  port: 6379
+  password: Neeraj123
+  database: 2
   pool_size: 10
   min_idle_conns: 5
   max_retries: 3
@@ -32,41 +32,23 @@ consumers:
   claim_interval: 15s
 
 topics:
-  - name: "example.topic"
-    stream_name: "example:topic"
-    max_len: 50000
+  - name: "user.lookup"
+    stream_name: "user:lookup"
+    max_len: 100000
     max_age: 24h
     trim_strategy: "MAXLEN"
-    consumer_group: "example-group"
+    consumer_group: "user-lookup-group"
     retry_attempts: 3
-    description: "Example topic"
+    description: "User lookup events"
 
-  - name: "order.created"
-    stream_name: "orders:created"
-    max_len: 50000
+  - name: "user.failed.lookup"
+    stream_name: "user:failed.lookup"
+    max_len: 100000
     max_age: 24h
     trim_strategy: "MAXLEN"
-    consumer_group: "order-processors"
+    consumer_group: "user-lookup-group"
     retry_attempts: 3
-    description: "Order creation events"
-
-  - name: "order.updated"
-    stream_name: "orders:updated"
-    max_len: 50000
-    max_age: 24h
-    trim_strategy: "MAXLEN"
-    consumer_group: "order-processors"
-    retry_attempts: 3
-    description: "Order update events"
-
-  - name: "payment.requested"
-    stream_name: "payments:requested"
-    max_len: 25000
-    max_age: 48h
-    trim_strategy: "MAXLEN"
-    consumer_group: "payment-processors"
-    retry_attempts: 5
-    description: "Payment request events"
+    description: "User lookup failed events"
 
 monitoring:
   enabled: true
@@ -75,9 +57,7 @@ monitoring:
   prometheus_path: "/metrics"
 
 logging:
-  level: ${LOG_LEVEL:-INFO}
-  format: ${LOG_FORMAT:-json}
-  output: ${LOG_OUTPUT:-stdout}
+  level: "INFO"
+  format: "json"
+  output: "stdout"
   structured: true
-
-

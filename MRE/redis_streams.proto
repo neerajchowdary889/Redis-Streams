@@ -1,0 +1,152 @@
+syntax = "proto3";
+
+package redisstreamspb;
+
+option go_package = "RedisStreams/api/proto;redisstreamspb";
+
+import "google/protobuf/struct.proto";
+
+message PublishRequest {
+  string topic = 1;
+  // oneof payload
+  string text = 2;
+  bytes bytes_data = 3;
+  google.protobuf.Struct json = 4;
+  map<string, string> headers = 5;
+}
+
+message PublishResponse {
+  string id = 1;
+}
+
+message BatchMessage {
+  string topic = 1;
+  string id = 2; // optional, "*" for auto
+  google.protobuf.Struct fields = 3; // raw fields to XADD
+}
+
+message PublishBatchRequest {
+  repeated BatchMessage messages = 1;
+}
+
+message PublishBatchResponse {}
+
+message SubscribeRequest {
+  string topic = 1;
+  string consumer_name = 2;
+  int64 batch_size = 3;
+  int64 block_timeout_ms = 4;
+  int64 consumer_timeout_ms = 5;
+  bool auto_ack = 6;
+}
+
+message Message {
+  string topic = 1;
+  string id = 2;
+  google.protobuf.Struct fields = 3;
+}
+
+message AckRequest {
+  string topic = 1;
+  string consumer_group = 2; // optional; default group from topic
+  string id = 3;
+}
+
+message AckResponse {}
+
+message ListTopicsRequest {}
+message ListTopicsResponse {
+  repeated string names = 1;
+}
+
+message ReadStreamRequest {
+  string topic = 1;
+  string start_id = 2; // "0", "$", "1234567890-0", etc.
+  int64 count = 3; // limit number of entries
+  int64 block_timeout_ms = 4; // 0 for non-blocking
+}
+
+message ReadStreamResponse {
+  repeated Message messages = 1;
+  bool has_more = 2; // true if there are more messages
+  string last_id = 3; // last message ID for pagination
+}
+
+message ReadRangeRequest {
+  string topic = 1;
+  string start_id = 2; // inclusive
+  string end_id = 3; // inclusive, "+" for latest
+  int64 count = 4; // limit number of entries
+}
+
+message ReadRangeResponse {
+  repeated Message messages = 1;
+}
+
+message StreamInfoRequest {
+  string topic = 1;
+}
+
+message StreamInfoResponse {
+  int64 length = 1;
+  string first_entry_id = 2;
+  string last_entry_id = 3;
+  int64 entries_added = 4;
+  int64 groups = 5;
+  int64 consumers = 6;
+}
+
+message ConsumerGroupInfoRequest {
+  string topic = 1;
+}
+
+message ConsumerGroupInfo {
+  string name = 1;
+  int64 consumers = 2;
+  int64 pending = 3;
+  string last_delivered_id = 4;
+}
+
+message ConsumerGroupInfoResponse {
+  repeated ConsumerGroupInfo groups = 1;
+}
+
+message CreateConsumerGroupRequest {
+  string topic = 1;
+  string group_name = 2;
+  string start_id = 3; // "$" for new messages, "0" for all
+}
+
+message CreateConsumerGroupResponse {}
+
+message DeleteConsumerGroupRequest {
+  string topic = 1;
+  string group_name = 2;
+}
+
+message DeleteConsumerGroupResponse {}
+
+service RedisStreams {
+  // Publishing
+  rpc Publish(PublishRequest) returns (PublishResponse);
+  rpc PublishBatch(PublishBatchRequest) returns (PublishBatchResponse);
+  
+  // Consuming
+  rpc Subscribe(SubscribeRequest) returns (stream Message);
+  rpc ReadStream(ReadStreamRequest) returns (ReadStreamResponse);
+  rpc ReadRange(ReadRangeRequest) returns (ReadRangeResponse);
+  
+  // Acknowledgment
+  rpc Ack(AckRequest) returns (AckResponse);
+  
+  // Topic Management
+  rpc ListTopics(ListTopicsRequest) returns (ListTopicsResponse);
+  rpc StreamInfo(StreamInfoRequest) returns (StreamInfoResponse);
+  rpc ConsumerGroupInfo(ConsumerGroupInfoRequest) returns (ConsumerGroupInfoResponse);
+  
+  // Consumer Group Management
+  rpc CreateConsumerGroup(CreateConsumerGroupRequest) returns (CreateConsumerGroupResponse);
+  rpc DeleteConsumerGroup(DeleteConsumerGroupRequest) returns (DeleteConsumerGroupResponse);
+}
+
+
