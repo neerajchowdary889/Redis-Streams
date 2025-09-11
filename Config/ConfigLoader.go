@@ -243,6 +243,34 @@ func (cl *ConfigLoader) validateAndSetDefaults(config *Config) error {
 		config.Monitoring.PrometheusPath = "/metrics"
 	}
 
+	// Performance defaults
+	if config.Performance.WorkerPoolSize == 0 {
+		config.Performance.WorkerPoolSize = 8 // Default to 8 workers
+	}
+	if config.Performance.BatchFlushInterval == 0 {
+		config.Performance.BatchFlushInterval = 10 * time.Millisecond
+	}
+	if config.Performance.MemoryPoolSize == 0 {
+		config.Performance.MemoryPoolSize = 1000
+	}
+	if config.Performance.MaxConcurrentStreams == 0 {
+		config.Performance.MaxConcurrentStreams = 100
+	}
+	if config.Performance.KeepAliveInterval == 0 {
+		config.Performance.KeepAliveInterval = 30 * time.Second
+	}
+
+	// Redis performance defaults
+	if config.Redis.MaxConnAge == 0 {
+		config.Redis.MaxConnAge = 30 * time.Minute
+	}
+	if config.Redis.MinRetryBackoff == 0 {
+		config.Redis.MinRetryBackoff = 8 * time.Millisecond
+	}
+	if config.Redis.MaxRetryBackoff == 0 {
+		config.Redis.MaxRetryBackoff = 512 * time.Millisecond
+	}
+
 	// Validate topics
 	if len(config.Topics) == 0 {
 		return fmt.Errorf("no topics configured")

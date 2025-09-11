@@ -60,7 +60,10 @@ func main() {
 		log.Fatalf("Failed to listen: %v", err)
 	}
 
-	grpcServer := grpc.NewServer()
+	// Configure gRPC server with performance optimizations
+	grpcServer := grpc.NewServer(
+		grpc.MaxConcurrentStreams(uint32(config.Performance.MaxConcurrentStreams)),
+	)
 
 	// Register health check service
 	healthSrv := health.NewServer()

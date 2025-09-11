@@ -4,13 +4,13 @@ set -euo pipefail
 # Configuration
 DOCKER_COMPOSE="docker-compose"
 REDIS_CONTAINER="redis-streams"
-APP_BINARY="./bin/redis_streams"
+APP_BINARY="./bin/redis_streams_grpc"
 
 # Colors
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 RED='\033[0;31m'
-NC='\033[0m' # No Colorolor
+NC='\033[0m' # No Color
 
 # Helper function to show help
 show_help() {
@@ -25,19 +25,17 @@ show_help() {
     echo "  monitor       - Monitor Redis commands"
     echo "  clean         - Clean up containers and volumes"
     echo "  test          - Run tests"
-    echo "  build         - Build the Go application"
-    echo "  run           - Run the example application"
     echo "  deps          - Install Go dependencies"
-    echo "  setup         - Initial setup (create redis.conf)"
     echo "  protos        - Generate gRPC protobuf stubs"
-    echo "  run-microservice - Run the main gRPC microservice (same as run-grpc)"
-    echo "  client        - Run example gRPC client"
-    echo "  python-client - Run Python gRPC client"
-    echo "  python-test   - Run Python test script"
-    echo "  debug         - Show debug information about streams and consumers"
-    echo "  health        - Check the health of the Redis container"
-    echo "  grafana       - Open Grafana dashboard in browser"
-    echo "  monitoring    - Start all monitoring services (Redis, Prometheus, Grafana)"
+    echo "  run-microservice - Run the gRPC microservice"
+    echo "  python-client     - Run Python gRPC client"
+    echo "  python-test       - Run Python test script"
+    echo "  performance-test  - Run Go performance test"
+    echo "  benchmark         - Run comprehensive benchmark"
+    echo "  debug             - Show debug information about streams"
+    echo "  health            - Check the health of the Redis container"
+    echo "  grafana           - Open Grafana dashboard in browser"
+    echo "  monitoring        - Start all monitoring services"
     echo "  help          - Show this help message"
 }
 
@@ -89,22 +87,6 @@ install_deps() {
     echo -e "${BLUE}Installing Go dependencies...${NC}"
     go mod tidy
     go mod download
-}
-
-# Build the application
-build_app() {
-    install_deps
-    echo -e "${BLUE}Building Go application...${NC}"
-    mkdir -p "$(dirname "$APP_BINARY")"  # Create bin directory if it doesn't exist
-    go build -o "$APP_BINARY" .
-    chmod +x "$APP_BINARY"  # Make sure the binary is executable
-}
-
-# Run the application
-run_app() {
-    build_app
-    echo -e "${BLUE}Running application...${NC}"
-    "$APP_BINARY"
 }
 
 # Generate protobufs
@@ -160,14 +142,6 @@ EOF
     echo -e "${GREEN}Redis configuration created.${NC}"
 }
 
-# Development setup
-dev_setup() {
-    setup_redis
-    start_services
-    echo -e "${GREEN}Development environment ready!${NC}"
-    echo "Run './RDS.sh run' in another terminal to start the app"
-    echo "Visit http://localhost:5540 for Redis Insight monitoring"
-}
 
 # Debug Redis streams
 debug_streams() {
@@ -245,15 +219,6 @@ run_microservice() {
     CONFIG_PATH=${CONFIG_PATH:-Config/config.yml} ./bin/redis_streams_grpc --health-port 8083 ${GRPC_FLAGS:-}
 }
 
-# Run example gRPC client
-run_client() {
-    install_deps
-    gen_protos
-    echo -e "${BLUE}Building example client...${NC}"
-    go build -o ./bin/example_client ./examples/client
-    echo -e "${BLUE}Running example client...${NC}"
-    ./bin/example_client
-}
 
 # Run Python gRPC client
 run_python_client() {
@@ -298,26 +263,14 @@ case "$1" in
     deps)
         install_deps
         ;;
-    build)
-        build_app
-        ;;
-    run)
-        run_app
-        ;;
     test)
         run_tests
         ;;
     protos)
         gen_protos
         ;;
-    run-grpc)
-        run_grpc
-        ;;
     run-microservice)
         run_microservice
-        ;;
-    client)
-        run_client
         ;;
     python-client)
         run_python_client
@@ -325,11 +278,22 @@ case "$1" in
     python-test)
         run_python_test
         ;;
-    setup)
-        setup_redis
+    performance-test)
+        echo "🚀 Running Go performance test..."
+        cd examples
+        go run performance_client.go
+        cd ..
         ;;
-    dev)
-        dev_setup
+    benchmark)
+        echo "📊 Running comprehensive benchmark..."
+        echo "Starting Redis and gRPC server..."
+        ./RDS.sh start
+        sleep 5
+        
+        echo "Running performance tests..."
+        ./RDS.sh performance-test
+        
+        echo "Benchmark completed!"
         ;;
     debug)
         debug_streams

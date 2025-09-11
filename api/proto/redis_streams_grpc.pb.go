@@ -21,10 +21,12 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	RedisStreams_Publish_FullMethodName             = "/redisstreamspb.RedisStreams/Publish"
 	RedisStreams_PublishBatch_FullMethodName        = "/redisstreamspb.RedisStreams/PublishBatch"
+	RedisStreams_PublishStream_FullMethodName       = "/redisstreamspb.RedisStreams/PublishStream"
 	RedisStreams_Subscribe_FullMethodName           = "/redisstreamspb.RedisStreams/Subscribe"
 	RedisStreams_ReadStream_FullMethodName          = "/redisstreamspb.RedisStreams/ReadStream"
 	RedisStreams_ReadRange_FullMethodName           = "/redisstreamspb.RedisStreams/ReadRange"
 	RedisStreams_Ack_FullMethodName                 = "/redisstreamspb.RedisStreams/Ack"
+	RedisStreams_AckBatch_FullMethodName            = "/redisstreamspb.RedisStreams/AckBatch"
 	RedisStreams_ListTopics_FullMethodName          = "/redisstreamspb.RedisStreams/ListTopics"
 	RedisStreams_StreamInfo_FullMethodName          = "/redisstreamspb.RedisStreams/StreamInfo"
 	RedisStreams_ConsumerGroupInfo_FullMethodName   = "/redisstreamspb.RedisStreams/ConsumerGroupInfo"
@@ -39,12 +41,14 @@ type RedisStreamsClient interface {
 	// Publishing
 	Publish(ctx context.Context, in *PublishRequest, opts ...grpc.CallOption) (*PublishResponse, error)
 	PublishBatch(ctx context.Context, in *PublishBatchRequest, opts ...grpc.CallOption) (*PublishBatchResponse, error)
+	PublishStream(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[PublishRequest, PublishBatchResponse], error)
 	// Consuming
 	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Message], error)
 	ReadStream(ctx context.Context, in *ReadStreamRequest, opts ...grpc.CallOption) (*ReadStreamResponse, error)
 	ReadRange(ctx context.Context, in *ReadRangeRequest, opts ...grpc.CallOption) (*ReadRangeResponse, error)
 	// Acknowledgment
 	Ack(ctx context.Context, in *AckRequest, opts ...grpc.CallOption) (*AckResponse, error)
+	AckBatch(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[AckRequest, AckResponse], error)
 	// Topic Management
 	ListTopics(ctx context.Context, in *ListTopicsRequest, opts ...grpc.CallOption) (*ListTopicsResponse, error)
 	StreamInfo(ctx context.Context, in *StreamInfoRequest, opts ...grpc.CallOption) (*StreamInfoResponse, error)
@@ -82,9 +86,22 @@ func (c *redisStreamsClient) PublishBatch(ctx context.Context, in *PublishBatchR
 	return out, nil
 }
 
+func (c *redisStreamsClient) PublishStream(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[PublishRequest, PublishBatchResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &RedisStreams_ServiceDesc.Streams[0], RedisStreams_PublishStream_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[PublishRequest, PublishBatchResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type RedisStreams_PublishStreamClient = grpc.ClientStreamingClient[PublishRequest, PublishBatchResponse]
+
 func (c *redisStreamsClient) Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Message], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &RedisStreams_ServiceDesc.Streams[0], RedisStreams_Subscribe_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &RedisStreams_ServiceDesc.Streams[1], RedisStreams_Subscribe_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -130,6 +147,19 @@ func (c *redisStreamsClient) Ack(ctx context.Context, in *AckRequest, opts ...gr
 	}
 	return out, nil
 }
+
+func (c *redisStreamsClient) AckBatch(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[AckRequest, AckResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &RedisStreams_ServiceDesc.Streams[2], RedisStreams_AckBatch_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[AckRequest, AckResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type RedisStreams_AckBatchClient = grpc.ClientStreamingClient[AckRequest, AckResponse]
 
 func (c *redisStreamsClient) ListTopics(ctx context.Context, in *ListTopicsRequest, opts ...grpc.CallOption) (*ListTopicsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -188,12 +218,14 @@ type RedisStreamsServer interface {
 	// Publishing
 	Publish(context.Context, *PublishRequest) (*PublishResponse, error)
 	PublishBatch(context.Context, *PublishBatchRequest) (*PublishBatchResponse, error)
+	PublishStream(grpc.ClientStreamingServer[PublishRequest, PublishBatchResponse]) error
 	// Consuming
 	Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[Message]) error
 	ReadStream(context.Context, *ReadStreamRequest) (*ReadStreamResponse, error)
 	ReadRange(context.Context, *ReadRangeRequest) (*ReadRangeResponse, error)
 	// Acknowledgment
 	Ack(context.Context, *AckRequest) (*AckResponse, error)
+	AckBatch(grpc.ClientStreamingServer[AckRequest, AckResponse]) error
 	// Topic Management
 	ListTopics(context.Context, *ListTopicsRequest) (*ListTopicsResponse, error)
 	StreamInfo(context.Context, *StreamInfoRequest) (*StreamInfoResponse, error)
@@ -217,6 +249,9 @@ func (UnimplementedRedisStreamsServer) Publish(context.Context, *PublishRequest)
 func (UnimplementedRedisStreamsServer) PublishBatch(context.Context, *PublishBatchRequest) (*PublishBatchResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PublishBatch not implemented")
 }
+func (UnimplementedRedisStreamsServer) PublishStream(grpc.ClientStreamingServer[PublishRequest, PublishBatchResponse]) error {
+	return status.Errorf(codes.Unimplemented, "method PublishStream not implemented")
+}
 func (UnimplementedRedisStreamsServer) Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[Message]) error {
 	return status.Errorf(codes.Unimplemented, "method Subscribe not implemented")
 }
@@ -228,6 +263,9 @@ func (UnimplementedRedisStreamsServer) ReadRange(context.Context, *ReadRangeRequ
 }
 func (UnimplementedRedisStreamsServer) Ack(context.Context, *AckRequest) (*AckResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Ack not implemented")
+}
+func (UnimplementedRedisStreamsServer) AckBatch(grpc.ClientStreamingServer[AckRequest, AckResponse]) error {
+	return status.Errorf(codes.Unimplemented, "method AckBatch not implemented")
 }
 func (UnimplementedRedisStreamsServer) ListTopics(context.Context, *ListTopicsRequest) (*ListTopicsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListTopics not implemented")
@@ -301,6 +339,13 @@ func _RedisStreams_PublishBatch_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RedisStreams_PublishStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(RedisStreamsServer).PublishStream(&grpc.GenericServerStream[PublishRequest, PublishBatchResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type RedisStreams_PublishStreamServer = grpc.ClientStreamingServer[PublishRequest, PublishBatchResponse]
+
 func _RedisStreams_Subscribe_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(SubscribeRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -365,6 +410,13 @@ func _RedisStreams_Ack_Handler(srv interface{}, ctx context.Context, dec func(in
 	}
 	return interceptor(ctx, in, info, handler)
 }
+
+func _RedisStreams_AckBatch_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(RedisStreamsServer).AckBatch(&grpc.GenericServerStream[AckRequest, AckResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type RedisStreams_AckBatchServer = grpc.ClientStreamingServer[AckRequest, AckResponse]
 
 func _RedisStreams_ListTopics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListTopicsRequest)
@@ -506,9 +558,19 @@ var RedisStreams_ServiceDesc = grpc.ServiceDesc{
 	},
 	Streams: []grpc.StreamDesc{
 		{
+			StreamName:    "PublishStream",
+			Handler:       _RedisStreams_PublishStream_Handler,
+			ClientStreams: true,
+		},
+		{
 			StreamName:    "Subscribe",
 			Handler:       _RedisStreams_Subscribe_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "AckBatch",
+			Handler:       _RedisStreams_AckBatch_Handler,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "redis_streams.proto",

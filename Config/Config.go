@@ -4,12 +4,25 @@ import "time"
 
 // Config holds the configuration for Redis Streams client
 type Config struct {
-	Redis      RedisConfig      `yaml:"redis"`
-	Streams    StreamsConfig    `yaml:"streams"`
-	Consumers  ConsumersConfig  `yaml:"consumers"`
-	Topics     []TopicConfig    `yaml:"topics"`
-	Monitoring MonitoringConfig `yaml:"monitoring"`
-	Logging    LoggingConfig    `yaml:"logging"`
+	Redis       RedisConfig       `yaml:"redis"`
+	Streams     StreamsConfig     `yaml:"streams"`
+	Consumers   ConsumersConfig   `yaml:"consumers"`
+	Topics      []TopicConfig     `yaml:"topics"`
+	Monitoring  MonitoringConfig  `yaml:"monitoring"`
+	Logging     LoggingConfig     `yaml:"logging"`
+	Performance PerformanceConfig `yaml:"performance"`
+}
+
+// PerformanceConfig holds performance optimization settings
+type PerformanceConfig struct {
+	EnablePipelining     bool          `yaml:"enable_pipelining"`
+	EnableCompression    bool          `yaml:"enable_compression"`
+	EnableKeepAlive      bool          `yaml:"enable_keep_alive"`
+	KeepAliveInterval    time.Duration `yaml:"keep_alive_interval"`
+	MaxConcurrentStreams int           `yaml:"max_concurrent_streams"`
+	WorkerPoolSize       int           `yaml:"worker_pool_size"`
+	BatchFlushInterval   time.Duration `yaml:"batch_flush_interval"`
+	MemoryPoolSize       int           `yaml:"memory_pool_size"`
 }
 
 // RedisConfig holds Redis connection configuration
@@ -29,6 +42,11 @@ type RedisConfig struct {
 	IdleTimeout  time.Duration `yaml:"idle_timeout"`
 	ClientName   string        `yaml:"client_name"`
 	TLS          TLSConfig     `yaml:"tls"`
+	// Performance optimizations
+	MaxConnAge       time.Duration `yaml:"max_conn_age"`
+	MinRetryBackoff  time.Duration `yaml:"min_retry_backoff"`
+	MaxRetryBackoff  time.Duration `yaml:"max_retry_backoff"`
+	DisableIndentity bool          `yaml:"disable_identity"`
 }
 
 // TLSConfig holds TLS configuration
