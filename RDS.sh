@@ -28,12 +28,14 @@ show_help() {
     echo "  deps          - Install Go dependencies"
     echo "  protos        - Generate gRPC protobuf stubs"
     echo "  run-microservice - Run the gRPC microservice"
-    echo "  python-client - Run Python gRPC client"
-    echo "  python-test   - Run Python test script"
-    echo "  debug         - Show debug information about streams"
-    echo "  health        - Check the health of the Redis container"
-    echo "  grafana       - Open Grafana dashboard in browser"
-    echo "  monitoring    - Start all monitoring services"
+    echo "  python-client     - Run Python gRPC client"
+    echo "  python-test       - Run Python test script"
+    echo "  performance-test  - Run Go performance test"
+    echo "  benchmark         - Run comprehensive benchmark"
+    echo "  debug             - Show debug information about streams"
+    echo "  health            - Check the health of the Redis container"
+    echo "  grafana           - Open Grafana dashboard in browser"
+    echo "  monitoring        - Start all monitoring services"
     echo "  help          - Show this help message"
 }
 
@@ -275,6 +277,23 @@ case "$1" in
         ;;
     python-test)
         run_python_test
+        ;;
+    performance-test)
+        echo "🚀 Running Go performance test..."
+        cd examples
+        go run performance_client.go
+        cd ..
+        ;;
+    benchmark)
+        echo "📊 Running comprehensive benchmark..."
+        echo "Starting Redis and gRPC server..."
+        ./RDS.sh start
+        sleep 5
+        
+        echo "Running performance tests..."
+        ./RDS.sh performance-test
+        
+        echo "Benchmark completed!"
         ;;
     debug)
         debug_streams

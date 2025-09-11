@@ -125,15 +125,21 @@ func New(config *RSconfig.Config, logger RSconfig.Logger) (*RedisStreamMQ, error
 func (mq *RedisStreamMQ) connect() error {
 	addr := fmt.Sprintf("%s:%d", mq.config.Redis.Host, mq.config.Redis.Port)
 
+	// Optimize pool size based on performance config
+	poolSize := mq.config.Redis.PoolSize
+	if mq.config.Performance.WorkerPoolSize > poolSize {
+		poolSize = mq.config.Performance.WorkerPoolSize * 2 // 2x workers for Redis connections
+	}
+
 	opts := &redis.Options{
 		Addr:            addr,
 		Password:        mq.config.Redis.Password,
 		DB:              mq.config.Redis.Database,
-		PoolSize:        mq.config.Redis.PoolSize,
+		PoolSize:        poolSize,
 		MinIdleConns:    mq.config.Redis.MinIdleConns,
 		MaxRetries:      mq.config.Redis.MaxRetries,
-		MinRetryBackoff: mq.config.Redis.RetryBackoff,
-		MaxRetryBackoff: mq.config.Redis.RetryBackoff * 8,
+		MinRetryBackoff: mq.config.Redis.MinRetryBackoff,
+		MaxRetryBackoff: mq.config.Redis.MaxRetryBackoff,
 		DialTimeout:     mq.config.Redis.DialTimeout,
 		ReadTimeout:     mq.config.Redis.ReadTimeout,
 		WriteTimeout:    mq.config.Redis.WriteTimeout,

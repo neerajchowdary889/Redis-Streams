@@ -1,14 +1,8 @@
-package main
+package MRE
 
 import (
 	"context"
-	"flag"
 	"fmt"
-	"log"
-	"os"
-	"os/signal"
-	"sync"
-	"syscall"
 	"time"
 
 	"google.golang.org/grpc"
@@ -18,14 +12,6 @@ import (
 
 	pb "MRETest/RedisStreams/api/proto"
 )
-
-type LookupRequest struct {
-	QueryID    string            `json:"query_id"`
-	UserID     string            `json:"user_id"`
-	LookupType string            `json:"lookup_type"`
-	Fields     map[string]string `json:"fields"`
-	Timestamp  string            `json:"timestamp"`
-}
 
 type LookupClient struct {
 	client pb.RedisStreamsClient
@@ -55,14 +41,45 @@ func (c *LookupClient) PublishLookupRequest(req LookupRequest) (string, error) {
 		fieldsMap[k] = v
 	}
 
-	// Create the protobuf struct with the converted map
-	fields, err := structpb.NewStruct(map[string]interface{}{
+	// Prepare the message data
+	messageData := map[string]interface{}{
 		"query_id":    req.QueryID,
 		"user_id":     req.UserID,
 		"lookup_type": req.LookupType,
 		"fields":      fieldsMap,
 		"timestamp":   req.Timestamp,
-	})
+	}
+
+	// Add result data if present
+	if req.Result != nil {
+		// Convert []int16 to comma-separated strings for protobuf compatibility
+		replicasStr := ""
+		for i, v := range req.Result.Replicas {
+			if i > 0 {
+				replicasStr += ","
+			}
+			replicasStr += fmt.Sprintf("%d", v)
+		}
+
+		allStr := ""
+		for i, v := range req.Result.All {
+			if i > 0 {
+				allStr += ","
+			}
+			allStr += fmt.Sprintf("%d", v)
+		}
+
+		resultData := map[string]interface{}{
+			"epoch":    req.Result.Epoch,
+			"primary":  fmt.Sprintf("%d", req.Result.Primary),
+			"replicas": replicasStr,
+			"all":      allStr,
+		}
+		messageData["result"] = resultData
+	}
+
+	// Create the protobuf struct with the converted map
+	fields, err := structpb.NewStruct(messageData)
 	if err != nil {
 		return "", fmt.Errorf("failed to create struct: %v", err)
 	}
@@ -88,6 +105,20 @@ func generateTestRequests(count int) []LookupRequest {
 	now := time.Now().Format(time.RFC3339)
 
 	for i := 0; i < count; i++ {
+		// Generate a mock result for some requests (every 3rd request)
+		var result *Result
+		if i%3 == 0 {
+			replicas := []int16{int16(1 + i%3), int16(2 + i%3)}
+			all := append([]int16{int16(i % 5)}, replicas...)
+
+			result = &Result{
+				Epoch:    uint64(time.Now().Unix()),
+				Primary:  int16(i % 5),
+				Replicas: replicas,
+				All:      all,
+			}
+		}
+
 		req := LookupRequest{
 			QueryID:    fmt.Sprintf("qry_%d_%d", time.Now().UnixNano(), i),
 			UserID:     fmt.Sprintf("user_%d", 1000+i%10), // 10 different users
@@ -98,6 +129,7 @@ func generateTestRequests(count int) []LookupRequest {
 				"phone":  fmt.Sprintf("+1%09d", 1000000000+i%1000000),
 				"device": fmt.Sprintf("device_%d", i%5),
 			},
+			Result: result,
 		}
 		reqs = append(reqs, req)
 	}
@@ -105,73 +137,113 @@ func generateTestRequests(count int) []LookupRequest {
 	return reqs
 }
 
-func main() {
-	serverAddr := flag.String("server", "localhost:16001", "gRPC server address")
-	messageCount := flag.Int("count", 10, "Number of test messages to send")
-	flag.Parse()
-
-	// Initialize client
-	client, err := NewLookupClient(*serverAddr)
-	if err != nil {
-		log.Fatalf("Failed to create client: %v", err)
+// PublishBatch publishes multiple lookup requests in a single batch call
+func (c *LookupClient) PublishBatch(requests []LookupRequest) (int, error) {
+	if len(requests) == 0 {
+		return 0, nil
 	}
-	defer client.Close()
 
-	// Handle graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	// Prepare batch messages
+	messages := make([]*pb.BatchMessage, 0, len(requests))
 
-	// Generate test requests
-	reqs := generateTestRequests(*messageCount)
+	for _, req := range requests {
+		// Convert the fields map to map[string]interface{} for protobuf
+		fieldsMap := make(map[string]interface{}, len(req.Fields))
+		for k, v := range req.Fields {
+			fieldsMap[k] = v
+		}
 
-	// Publish messages concurrently
-	var wg sync.WaitGroup
-	errChan := make(chan error, len(reqs))
+		// Prepare the message data
+		messageData := map[string]interface{}{
+			"query_id":    req.QueryID,
+			"user_id":     req.UserID,
+			"lookup_type": req.LookupType,
+			"fields":      fieldsMap,
+			"timestamp":   req.Timestamp,
+		}
 
-	for i, req := range reqs {
-		wg.Add(1)
-		go func(idx int, r LookupRequest) {
-			defer wg.Done()
-
-			// Add some delay between messages
-			time.Sleep(time.Duration(idx%10) * 10 * time.Millisecond)
-
-			// Publish the message
-			id, err := client.PublishLookupRequest(r)
-			if err != nil {
-				errChan <- fmt.Errorf("error in request %d: %v", idx, err)
-				return
+		// Add result data if present
+		if req.Result != nil {
+			// Convert []int16 to comma-separated strings for protobuf compatibility
+			replicasStr := ""
+			for i, v := range req.Result.Replicas {
+				if i > 0 {
+					replicasStr += ","
+				}
+				replicasStr += fmt.Sprintf("%d", v)
 			}
 
-			log.Printf("Published message %d: %s - %s", idx, r.QueryID, id)
-		}(i, req)
+			allStr := ""
+			for i, v := range req.Result.All {
+				if i > 0 {
+					allStr += ","
+				}
+				allStr += fmt.Sprintf("%d", v)
+			}
 
-		// Check for termination signal
-		select {
-		case sig := <-sigChan:
-			log.Printf("Received signal: %v. Shutting down...", sig)
-			wg.Wait()
-			close(errChan)
-			return
-		default:
-			// Continue processing
+			resultData := map[string]interface{}{
+				"epoch":    req.Result.Epoch,
+				"primary":  fmt.Sprintf("%d", req.Result.Primary),
+				"replicas": replicasStr,
+				"all":      allStr,
+			}
+			messageData["result"] = resultData
 		}
+
+		// Create the protobuf struct with the converted map
+		fields, err := structpb.NewStruct(messageData)
+		if err != nil {
+			return 0, fmt.Errorf("failed to create struct for request %s: %v", req.QueryID, err)
+		}
+
+		// Create batch message
+		batchMsg := &pb.BatchMessage{
+			Topic:  "user.lookup",
+			Fields: fields,
+		}
+
+		messages = append(messages, batchMsg)
 	}
 
-	// Wait for all goroutines to complete
-	wg.Wait()
-	close(errChan)
+	// Create and send the batch request
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	// Log any errors
-	errCount := 0
-	for err := range errChan {
-		errCount++
-		log.Printf("Error: %v", err)
+	_, err := c.client.PublishBatch(ctx, &pb.PublishBatchRequest{
+		Messages: messages,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to publish batch: %v", err)
 	}
 
-	if errCount > 0 {
-		log.Printf("Completed with %d errors", errCount)
-	} else {
-		log.Printf("Successfully published %d messages", len(reqs))
+	return len(requests), nil
+}
+
+// PublishBatchSequential publishes multiple lookup requests one by one (fallback method)
+func (c *LookupClient) PublishBatchSequential(requests []LookupRequest) ([]string, error) {
+	ids := make([]string, 0, len(requests))
+
+	for _, req := range requests {
+		id, err := c.PublishLookupRequest(req)
+		if err != nil {
+			return ids, fmt.Errorf("failed to publish request %s: %v", req.QueryID, err)
+		}
+		ids = append(ids, id)
 	}
+
+	return ids, nil
+}
+
+// PublishSingle publishes a single lookup request
+func (c *LookupClient) PublishSingle(queryID, userID, lookupType string, fields map[string]string, result *Result) (string, error) {
+	req := LookupRequest{
+		QueryID:    queryID,
+		UserID:     userID,
+		LookupType: lookupType,
+		Fields:     fields,
+		Timestamp:  time.Now().Format(time.RFC3339),
+		Result:     result,
+	}
+
+	return c.PublishLookupRequest(req)
 }

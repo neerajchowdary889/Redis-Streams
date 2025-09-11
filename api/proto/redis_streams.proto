@@ -130,6 +130,7 @@ service RedisStreams {
   // Publishing
   rpc Publish(PublishRequest) returns (PublishResponse);
   rpc PublishBatch(PublishBatchRequest) returns (PublishBatchResponse);
+  rpc PublishStream(stream PublishRequest) returns (PublishBatchResponse);
   
   // Consuming
   rpc Subscribe(SubscribeRequest) returns (stream Message);
@@ -138,6 +139,7 @@ service RedisStreams {
   
   // Acknowledgment
   rpc Ack(AckRequest) returns (AckResponse);
+  rpc AckBatch(stream AckRequest) returns (AckResponse);
   
   // Topic Management
   rpc ListTopics(ListTopicsRequest) returns (ListTopicsResponse);
@@ -148,5 +150,3 @@ service RedisStreams {
   rpc CreateConsumerGroup(CreateConsumerGroupRequest) returns (CreateConsumerGroupResponse);
   rpc DeleteConsumerGroup(DeleteConsumerGroupRequest) returns (DeleteConsumerGroupResponse);
 }
-
-

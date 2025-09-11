@@ -1400,15 +1400,17 @@ const file_redis_streams_proto_rawDesc = "" +
 	"\x05topic\x18\x01 \x01(\tR\x05topic\x12\x1d\n" +
 	"\n" +
 	"group_name\x18\x02 \x01(\tR\tgroupName\"\x1d\n" +
-	"\x1bDeleteConsumerGroupResponse2\xda\a\n" +
+	"\x1bDeleteConsumerGroupResponse2\xfa\b\n" +
 	"\fRedisStreams\x12J\n" +
 	"\aPublish\x12\x1e.redisstreamspb.PublishRequest\x1a\x1f.redisstreamspb.PublishResponse\x12Y\n" +
-	"\fPublishBatch\x12#.redisstreamspb.PublishBatchRequest\x1a$.redisstreamspb.PublishBatchResponse\x12H\n" +
+	"\fPublishBatch\x12#.redisstreamspb.PublishBatchRequest\x1a$.redisstreamspb.PublishBatchResponse\x12W\n" +
+	"\rPublishStream\x12\x1e.redisstreamspb.PublishRequest\x1a$.redisstreamspb.PublishBatchResponse(\x01\x12H\n" +
 	"\tSubscribe\x12 .redisstreamspb.SubscribeRequest\x1a\x17.redisstreamspb.Message0\x01\x12S\n" +
 	"\n" +
 	"ReadStream\x12!.redisstreamspb.ReadStreamRequest\x1a\".redisstreamspb.ReadStreamResponse\x12P\n" +
 	"\tReadRange\x12 .redisstreamspb.ReadRangeRequest\x1a!.redisstreamspb.ReadRangeResponse\x12>\n" +
-	"\x03Ack\x12\x1a.redisstreamspb.AckRequest\x1a\x1b.redisstreamspb.AckResponse\x12S\n" +
+	"\x03Ack\x12\x1a.redisstreamspb.AckRequest\x1a\x1b.redisstreamspb.AckResponse\x12E\n" +
+	"\bAckBatch\x12\x1a.redisstreamspb.AckRequest\x1a\x1b.redisstreamspb.AckResponse(\x01\x12S\n" +
 	"\n" +
 	"ListTopics\x12!.redisstreamspb.ListTopicsRequest\x1a\".redisstreamspb.ListTopicsResponse\x12S\n" +
 	"\n" +
@@ -1469,28 +1471,32 @@ var file_redis_streams_proto_depIdxs = []int32{
 	18, // 7: redisstreamspb.ConsumerGroupInfoResponse.groups:type_name -> redisstreamspb.ConsumerGroupInfo
 	0,  // 8: redisstreamspb.RedisStreams.Publish:input_type -> redisstreamspb.PublishRequest
 	3,  // 9: redisstreamspb.RedisStreams.PublishBatch:input_type -> redisstreamspb.PublishBatchRequest
-	5,  // 10: redisstreamspb.RedisStreams.Subscribe:input_type -> redisstreamspb.SubscribeRequest
-	11, // 11: redisstreamspb.RedisStreams.ReadStream:input_type -> redisstreamspb.ReadStreamRequest
-	13, // 12: redisstreamspb.RedisStreams.ReadRange:input_type -> redisstreamspb.ReadRangeRequest
-	7,  // 13: redisstreamspb.RedisStreams.Ack:input_type -> redisstreamspb.AckRequest
-	9,  // 14: redisstreamspb.RedisStreams.ListTopics:input_type -> redisstreamspb.ListTopicsRequest
-	15, // 15: redisstreamspb.RedisStreams.StreamInfo:input_type -> redisstreamspb.StreamInfoRequest
-	17, // 16: redisstreamspb.RedisStreams.ConsumerGroupInfo:input_type -> redisstreamspb.ConsumerGroupInfoRequest
-	20, // 17: redisstreamspb.RedisStreams.CreateConsumerGroup:input_type -> redisstreamspb.CreateConsumerGroupRequest
-	22, // 18: redisstreamspb.RedisStreams.DeleteConsumerGroup:input_type -> redisstreamspb.DeleteConsumerGroupRequest
-	1,  // 19: redisstreamspb.RedisStreams.Publish:output_type -> redisstreamspb.PublishResponse
-	4,  // 20: redisstreamspb.RedisStreams.PublishBatch:output_type -> redisstreamspb.PublishBatchResponse
-	6,  // 21: redisstreamspb.RedisStreams.Subscribe:output_type -> redisstreamspb.Message
-	12, // 22: redisstreamspb.RedisStreams.ReadStream:output_type -> redisstreamspb.ReadStreamResponse
-	14, // 23: redisstreamspb.RedisStreams.ReadRange:output_type -> redisstreamspb.ReadRangeResponse
-	8,  // 24: redisstreamspb.RedisStreams.Ack:output_type -> redisstreamspb.AckResponse
-	10, // 25: redisstreamspb.RedisStreams.ListTopics:output_type -> redisstreamspb.ListTopicsResponse
-	16, // 26: redisstreamspb.RedisStreams.StreamInfo:output_type -> redisstreamspb.StreamInfoResponse
-	19, // 27: redisstreamspb.RedisStreams.ConsumerGroupInfo:output_type -> redisstreamspb.ConsumerGroupInfoResponse
-	21, // 28: redisstreamspb.RedisStreams.CreateConsumerGroup:output_type -> redisstreamspb.CreateConsumerGroupResponse
-	23, // 29: redisstreamspb.RedisStreams.DeleteConsumerGroup:output_type -> redisstreamspb.DeleteConsumerGroupResponse
-	19, // [19:30] is the sub-list for method output_type
-	8,  // [8:19] is the sub-list for method input_type
+	0,  // 10: redisstreamspb.RedisStreams.PublishStream:input_type -> redisstreamspb.PublishRequest
+	5,  // 11: redisstreamspb.RedisStreams.Subscribe:input_type -> redisstreamspb.SubscribeRequest
+	11, // 12: redisstreamspb.RedisStreams.ReadStream:input_type -> redisstreamspb.ReadStreamRequest
+	13, // 13: redisstreamspb.RedisStreams.ReadRange:input_type -> redisstreamspb.ReadRangeRequest
+	7,  // 14: redisstreamspb.RedisStreams.Ack:input_type -> redisstreamspb.AckRequest
+	7,  // 15: redisstreamspb.RedisStreams.AckBatch:input_type -> redisstreamspb.AckRequest
+	9,  // 16: redisstreamspb.RedisStreams.ListTopics:input_type -> redisstreamspb.ListTopicsRequest
+	15, // 17: redisstreamspb.RedisStreams.StreamInfo:input_type -> redisstreamspb.StreamInfoRequest
+	17, // 18: redisstreamspb.RedisStreams.ConsumerGroupInfo:input_type -> redisstreamspb.ConsumerGroupInfoRequest
+	20, // 19: redisstreamspb.RedisStreams.CreateConsumerGroup:input_type -> redisstreamspb.CreateConsumerGroupRequest
+	22, // 20: redisstreamspb.RedisStreams.DeleteConsumerGroup:input_type -> redisstreamspb.DeleteConsumerGroupRequest
+	1,  // 21: redisstreamspb.RedisStreams.Publish:output_type -> redisstreamspb.PublishResponse
+	4,  // 22: redisstreamspb.RedisStreams.PublishBatch:output_type -> redisstreamspb.PublishBatchResponse
+	4,  // 23: redisstreamspb.RedisStreams.PublishStream:output_type -> redisstreamspb.PublishBatchResponse
+	6,  // 24: redisstreamspb.RedisStreams.Subscribe:output_type -> redisstreamspb.Message
+	12, // 25: redisstreamspb.RedisStreams.ReadStream:output_type -> redisstreamspb.ReadStreamResponse
+	14, // 26: redisstreamspb.RedisStreams.ReadRange:output_type -> redisstreamspb.ReadRangeResponse
+	8,  // 27: redisstreamspb.RedisStreams.Ack:output_type -> redisstreamspb.AckResponse
+	8,  // 28: redisstreamspb.RedisStreams.AckBatch:output_type -> redisstreamspb.AckResponse
+	10, // 29: redisstreamspb.RedisStreams.ListTopics:output_type -> redisstreamspb.ListTopicsResponse
+	16, // 30: redisstreamspb.RedisStreams.StreamInfo:output_type -> redisstreamspb.StreamInfoResponse
+	19, // 31: redisstreamspb.RedisStreams.ConsumerGroupInfo:output_type -> redisstreamspb.ConsumerGroupInfoResponse
+	21, // 32: redisstreamspb.RedisStreams.CreateConsumerGroup:output_type -> redisstreamspb.CreateConsumerGroupResponse
+	23, // 33: redisstreamspb.RedisStreams.DeleteConsumerGroup:output_type -> redisstreamspb.DeleteConsumerGroupResponse
+	21, // [21:34] is the sub-list for method output_type
+	8,  // [8:21] is the sub-list for method input_type
 	8,  // [8:8] is the sub-list for extension type_name
 	8,  // [8:8] is the sub-list for extension extendee
 	0,  // [0:8] is the sub-list for field type_name

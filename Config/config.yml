@@ -3,16 +3,20 @@ redis:
   port: 6379
   password: Neeraj123
   database: 2
-  pool_size: 10
-  min_idle_conns: 5
+  pool_size: 16  # Increased for high throughput
+  min_idle_conns: 8  # Increased for better connection reuse
   max_retries: 3
   retry_backoff: 8ms
+  min_retry_backoff: 8ms
+  max_retry_backoff: 512ms
   dial_timeout: 5s
   read_timeout: 3s
   write_timeout: 3s
   pool_timeout: 4s
   idle_timeout: 5m
-  client_name: example-app
+  max_conn_age: 30m  # Connection recycling
+  client_name: MRE
+  disable_identity: false
 
 streams:
   default_max_len: 100000
@@ -22,12 +26,12 @@ streams:
   trim_interval: 5m
 
 consumers:
-  default_batch_size: 10
+  default_batch_size: 50  # Increased for better throughput
   default_block_timeout: 100ms
   default_consumer_timeout: 5s
   default_auto_ack: true
   delete_after_ack: true
-  max_pending_messages: 5000
+  max_pending_messages: 10000  # Increased for high throughput
   claim_min_idle_time: 10s
   claim_interval: 15s
 
@@ -61,3 +65,14 @@ logging:
   format: "json"
   output: "stdout"
   structured: true
+
+# Performance optimization settings
+performance:
+  enable_pipelining: true
+  enable_compression: false  # Disable for Redis streams
+  enable_keep_alive: true
+  keep_alive_interval: 30s
+  max_concurrent_streams: 100
+  worker_pool_size: 8  # CPU cores * 2
+  batch_flush_interval: 10ms
+  memory_pool_size: 1000
