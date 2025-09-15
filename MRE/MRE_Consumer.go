@@ -15,7 +15,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	pb "MRETest/RedisStreams/api/proto"
+	pb "RedisStreams/api/proto"
 )
 
 type Result struct {
@@ -35,7 +35,7 @@ type LookupRequest struct {
 }
 
 type LookupConsumer struct {
-	client    pb.RedisStreamsClient
+	Client    pb.RedisStreamsClient
 	conn      *grpc.ClientConn
 	batchSize int
 	mu        sync.Mutex
@@ -48,7 +48,7 @@ func NewLookupConsumer(serverAddr string) (*LookupConsumer, error) {
 	}
 
 	return &LookupConsumer{
-		client:    pb.NewRedisStreamsClient(conn),
+		Client:    pb.NewRedisStreamsClient(conn),
 		conn:      conn,
 		batchSize: 50, // Process 50 entries in a batch
 	}, nil
@@ -189,7 +189,7 @@ func (c *LookupConsumer) ConsumeStream(streamName string, consumerGroup string, 
 	log.Printf("Consumer Group: %s, Consumer: %s", consumerGroup, consumerName)
 
 	// Read messages from the stream
-	resp, err := c.client.ReadStream(ctx, &pb.ReadStreamRequest{
+	resp, err := c.Client.ReadStream(ctx, &pb.ReadStreamRequest{
 		Topic:   streamName,
 		Count:   int64(count),
 		StartId: "0", // Start from the beginning
@@ -206,7 +206,7 @@ func (c *LookupConsumer) ConsumeStream(streamName string, consumerGroup string, 
 
 		// Acknowledge the message to delete it
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		_, err := c.client.Ack(ctx, &pb.AckRequest{
+		_, err := c.Client.Ack(ctx, &pb.AckRequest{
 			Topic: streamName,
 			Id:    message.Id,
 		})
@@ -235,13 +235,13 @@ func (c *LookupConsumer) SubscribeToStream(streamName string, consumerGroup stri
 		Topic:             streamName,
 		ConsumerName:      consumerGroup,
 		BatchSize:         10,
-		BlockTimeoutMs:    5000, // 5 seconds
-		ConsumerTimeoutMs: 5000, // 5 seconds
+		BlockTimeoutMs:    10000, // 10 seconds - longer timeout
+		ConsumerTimeoutMs: 30000, // 30 seconds - much longer timeout
 		AutoAck:           true,
 	}
 
 	// Start streaming
-	stream, err := c.client.Subscribe(ctx, req)
+	stream, err := c.Client.Subscribe(ctx, req)
 	if err != nil {
 		return fmt.Errorf("failed to subscribe to stream: %v", err)
 	}
@@ -279,7 +279,7 @@ func (c *LookupConsumer) SubscribeToStream(streamName string, consumerGroup stri
 
 			// Acknowledge the message to delete it
 			ackCtx, ackCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			_, err = c.client.Ack(ackCtx, &pb.AckRequest{
+			_, err = c.Client.Ack(ackCtx, &pb.AckRequest{
 				Topic: streamName,
 				Id:    message.Id,
 			})
@@ -349,7 +349,7 @@ func (c *LookupConsumer) processBatch(messages []*pb.Message, streamName string)
 	if len(messageIDs) > 0 {
 		for _, msgID := range messageIDs {
 			ackCtx, ackCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			_, err := c.client.Ack(ackCtx, &pb.AckRequest{
+			_, err := c.Client.Ack(ackCtx, &pb.AckRequest{
 				Topic: streamName,
 				Id:    msgID,
 			})
@@ -383,12 +383,12 @@ func (c *LookupConsumer) SubscribeToStreamWithBatching(streamName string, consum
 			Topic:             streamName,
 			ConsumerName:      consumerGroup,
 			BatchSize:         int64(c.batchSize),
-			BlockTimeoutMs:    5000,  // 5 seconds
-			ConsumerTimeoutMs: 5000,  // 5 seconds
+			BlockTimeoutMs:    10000, // 10 seconds - longer timeout
+			ConsumerTimeoutMs: 30000, // 30 seconds - much longer timeout
 			AutoAck:           false, // We'll handle ACKs manually
 		}
 
-		stream, err := c.client.Subscribe(ctx, req)
+		stream, err := c.Client.Subscribe(ctx, req)
 		if err != nil {
 			errChan <- fmt.Errorf("failed to subscribe to stream: %v", err)
 			return

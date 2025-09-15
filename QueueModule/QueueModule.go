@@ -446,8 +446,19 @@ func (mq *RedisStreamMQ) consumeMessages(streamName, groupName string, consumer 
 
 			if err != nil {
 				if err == redis.Nil {
+					// No new messages, continue polling
 					continue
 				}
+
+				// Check if it's a context timeout (expected behavior)
+				if strings.Contains(err.Error(), "context deadline exceeded") ||
+					strings.Contains(err.Error(), "context canceled") {
+					// This is expected when no messages arrive within the timeout
+					// Don't log as error, just continue
+					continue
+				}
+
+				// Log other errors
 				mq.logger.Error("Error reading from stream",
 					"stream", streamName, "error", err)
 				time.Sleep(time.Second)
