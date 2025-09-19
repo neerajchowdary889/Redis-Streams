@@ -287,10 +287,12 @@ type SubscribeRequest struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Topic             string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
 	ConsumerName      string                 `protobuf:"bytes,2,opt,name=consumer_name,json=consumerName,proto3" json:"consumer_name,omitempty"`
-	BatchSize         int64                  `protobuf:"varint,3,opt,name=batch_size,json=batchSize,proto3" json:"batch_size,omitempty"`
-	BlockTimeoutMs    int64                  `protobuf:"varint,4,opt,name=block_timeout_ms,json=blockTimeoutMs,proto3" json:"block_timeout_ms,omitempty"`
-	ConsumerTimeoutMs int64                  `protobuf:"varint,5,opt,name=consumer_timeout_ms,json=consumerTimeoutMs,proto3" json:"consumer_timeout_ms,omitempty"`
-	AutoAck           bool                   `protobuf:"varint,6,opt,name=auto_ack,json=autoAck,proto3" json:"auto_ack,omitempty"`
+	ConsumerGroup     string                 `protobuf:"bytes,3,opt,name=consumer_group,json=consumerGroup,proto3" json:"consumer_group,omitempty"`
+	StartId           string                 `protobuf:"bytes,4,opt,name=start_id,json=startId,proto3" json:"start_id,omitempty"` // Add this field: "0", "$", ">", or specific ID
+	BatchSize         int64                  `protobuf:"varint,5,opt,name=batch_size,json=batchSize,proto3" json:"batch_size,omitempty"`
+	BlockTimeoutMs    int64                  `protobuf:"varint,6,opt,name=block_timeout_ms,json=blockTimeoutMs,proto3" json:"block_timeout_ms,omitempty"`
+	ConsumerTimeoutMs int64                  `protobuf:"varint,7,opt,name=consumer_timeout_ms,json=consumerTimeoutMs,proto3" json:"consumer_timeout_ms,omitempty"`
+	AutoAck           bool                   `protobuf:"varint,8,opt,name=auto_ack,json=autoAck,proto3" json:"auto_ack,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -335,6 +337,20 @@ func (x *SubscribeRequest) GetTopic() string {
 func (x *SubscribeRequest) GetConsumerName() string {
 	if x != nil {
 		return x.ConsumerName
+	}
+	return ""
+}
+
+func (x *SubscribeRequest) GetConsumerGroup() string {
+	if x != nil {
+		return x.ConsumerGroup
+	}
+	return ""
+}
+
+func (x *SubscribeRequest) GetStartId() string {
+	if x != nil {
+		return x.StartId
 	}
 	return ""
 }
@@ -1127,6 +1143,90 @@ func (x *ConsumerGroupInfoResponse) GetGroups() []*ConsumerGroupInfo {
 	return nil
 }
 
+type MessageBatch struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Topic         string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
+	Stream        string                 `protobuf:"bytes,2,opt,name=stream,proto3" json:"stream,omitempty"`
+	BatchId       int64                  `protobuf:"varint,3,opt,name=batch_id,json=batchId,proto3" json:"batch_id,omitempty"`
+	BatchSize     int64                  `protobuf:"varint,4,opt,name=batch_size,json=batchSize,proto3" json:"batch_size,omitempty"`
+	Messages      []*Message             `protobuf:"bytes,5,rep,name=messages,proto3" json:"messages,omitempty"`
+	Timestamp     int64                  `protobuf:"varint,6,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MessageBatch) Reset() {
+	*x = MessageBatch{}
+	mi := &file_redis_streams_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MessageBatch) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MessageBatch) ProtoMessage() {}
+
+func (x *MessageBatch) ProtoReflect() protoreflect.Message {
+	mi := &file_redis_streams_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MessageBatch.ProtoReflect.Descriptor instead.
+func (*MessageBatch) Descriptor() ([]byte, []int) {
+	return file_redis_streams_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *MessageBatch) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+func (x *MessageBatch) GetStream() string {
+	if x != nil {
+		return x.Stream
+	}
+	return ""
+}
+
+func (x *MessageBatch) GetBatchId() int64 {
+	if x != nil {
+		return x.BatchId
+	}
+	return 0
+}
+
+func (x *MessageBatch) GetBatchSize() int64 {
+	if x != nil {
+		return x.BatchSize
+	}
+	return 0
+}
+
+func (x *MessageBatch) GetMessages() []*Message {
+	if x != nil {
+		return x.Messages
+	}
+	return nil
+}
+
+func (x *MessageBatch) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
 type CreateConsumerGroupRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Topic         string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
@@ -1138,7 +1238,7 @@ type CreateConsumerGroupRequest struct {
 
 func (x *CreateConsumerGroupRequest) Reset() {
 	*x = CreateConsumerGroupRequest{}
-	mi := &file_redis_streams_proto_msgTypes[20]
+	mi := &file_redis_streams_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1150,7 +1250,7 @@ func (x *CreateConsumerGroupRequest) String() string {
 func (*CreateConsumerGroupRequest) ProtoMessage() {}
 
 func (x *CreateConsumerGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_redis_streams_proto_msgTypes[20]
+	mi := &file_redis_streams_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1163,7 +1263,7 @@ func (x *CreateConsumerGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateConsumerGroupRequest.ProtoReflect.Descriptor instead.
 func (*CreateConsumerGroupRequest) Descriptor() ([]byte, []int) {
-	return file_redis_streams_proto_rawDescGZIP(), []int{20}
+	return file_redis_streams_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *CreateConsumerGroupRequest) GetTopic() string {
@@ -1195,7 +1295,7 @@ type CreateConsumerGroupResponse struct {
 
 func (x *CreateConsumerGroupResponse) Reset() {
 	*x = CreateConsumerGroupResponse{}
-	mi := &file_redis_streams_proto_msgTypes[21]
+	mi := &file_redis_streams_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1207,7 +1307,7 @@ func (x *CreateConsumerGroupResponse) String() string {
 func (*CreateConsumerGroupResponse) ProtoMessage() {}
 
 func (x *CreateConsumerGroupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_redis_streams_proto_msgTypes[21]
+	mi := &file_redis_streams_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1220,7 +1320,7 @@ func (x *CreateConsumerGroupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateConsumerGroupResponse.ProtoReflect.Descriptor instead.
 func (*CreateConsumerGroupResponse) Descriptor() ([]byte, []int) {
-	return file_redis_streams_proto_rawDescGZIP(), []int{21}
+	return file_redis_streams_proto_rawDescGZIP(), []int{22}
 }
 
 type DeleteConsumerGroupRequest struct {
@@ -1233,7 +1333,7 @@ type DeleteConsumerGroupRequest struct {
 
 func (x *DeleteConsumerGroupRequest) Reset() {
 	*x = DeleteConsumerGroupRequest{}
-	mi := &file_redis_streams_proto_msgTypes[22]
+	mi := &file_redis_streams_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1245,7 +1345,7 @@ func (x *DeleteConsumerGroupRequest) String() string {
 func (*DeleteConsumerGroupRequest) ProtoMessage() {}
 
 func (x *DeleteConsumerGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_redis_streams_proto_msgTypes[22]
+	mi := &file_redis_streams_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1258,7 +1358,7 @@ func (x *DeleteConsumerGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteConsumerGroupRequest.ProtoReflect.Descriptor instead.
 func (*DeleteConsumerGroupRequest) Descriptor() ([]byte, []int) {
-	return file_redis_streams_proto_rawDescGZIP(), []int{22}
+	return file_redis_streams_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *DeleteConsumerGroupRequest) GetTopic() string {
@@ -1283,7 +1383,7 @@ type DeleteConsumerGroupResponse struct {
 
 func (x *DeleteConsumerGroupResponse) Reset() {
 	*x = DeleteConsumerGroupResponse{}
-	mi := &file_redis_streams_proto_msgTypes[23]
+	mi := &file_redis_streams_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1295,7 +1395,7 @@ func (x *DeleteConsumerGroupResponse) String() string {
 func (*DeleteConsumerGroupResponse) ProtoMessage() {}
 
 func (x *DeleteConsumerGroupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_redis_streams_proto_msgTypes[23]
+	mi := &file_redis_streams_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1308,7 +1408,7 @@ func (x *DeleteConsumerGroupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteConsumerGroupResponse.ProtoReflect.Descriptor instead.
 func (*DeleteConsumerGroupResponse) Descriptor() ([]byte, []int) {
-	return file_redis_streams_proto_rawDescGZIP(), []int{23}
+	return file_redis_streams_proto_rawDescGZIP(), []int{24}
 }
 
 var File_redis_streams_proto protoreflect.FileDescriptor
@@ -1334,15 +1434,17 @@ const file_redis_streams_proto_rawDesc = "" +
 	"\x06fields\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x06fields\"O\n" +
 	"\x13PublishBatchRequest\x128\n" +
 	"\bmessages\x18\x01 \x03(\v2\x1c.redisstreamspb.BatchMessageR\bmessages\"\x16\n" +
-	"\x14PublishBatchResponse\"\xe1\x01\n" +
+	"\x14PublishBatchResponse\"\xa3\x02\n" +
 	"\x10SubscribeRequest\x12\x14\n" +
 	"\x05topic\x18\x01 \x01(\tR\x05topic\x12#\n" +
-	"\rconsumer_name\x18\x02 \x01(\tR\fconsumerName\x12\x1d\n" +
+	"\rconsumer_name\x18\x02 \x01(\tR\fconsumerName\x12%\n" +
+	"\x0econsumer_group\x18\x03 \x01(\tR\rconsumerGroup\x12\x19\n" +
+	"\bstart_id\x18\x04 \x01(\tR\astartId\x12\x1d\n" +
 	"\n" +
-	"batch_size\x18\x03 \x01(\x03R\tbatchSize\x12(\n" +
-	"\x10block_timeout_ms\x18\x04 \x01(\x03R\x0eblockTimeoutMs\x12.\n" +
-	"\x13consumer_timeout_ms\x18\x05 \x01(\x03R\x11consumerTimeoutMs\x12\x19\n" +
-	"\bauto_ack\x18\x06 \x01(\bR\aautoAck\"`\n" +
+	"batch_size\x18\x05 \x01(\x03R\tbatchSize\x12(\n" +
+	"\x10block_timeout_ms\x18\x06 \x01(\x03R\x0eblockTimeoutMs\x12.\n" +
+	"\x13consumer_timeout_ms\x18\a \x01(\x03R\x11consumerTimeoutMs\x12\x19\n" +
+	"\bauto_ack\x18\b \x01(\bR\aautoAck\"`\n" +
 	"\aMessage\x12\x14\n" +
 	"\x05topic\x18\x01 \x01(\tR\x05topic\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12/\n" +
@@ -1389,7 +1491,15 @@ const file_redis_streams_proto_rawDesc = "" +
 	"\apending\x18\x03 \x01(\x03R\apending\x12*\n" +
 	"\x11last_delivered_id\x18\x04 \x01(\tR\x0flastDeliveredId\"V\n" +
 	"\x19ConsumerGroupInfoResponse\x129\n" +
-	"\x06groups\x18\x01 \x03(\v2!.redisstreamspb.ConsumerGroupInfoR\x06groups\"l\n" +
+	"\x06groups\x18\x01 \x03(\v2!.redisstreamspb.ConsumerGroupInfoR\x06groups\"\xc9\x01\n" +
+	"\fMessageBatch\x12\x14\n" +
+	"\x05topic\x18\x01 \x01(\tR\x05topic\x12\x16\n" +
+	"\x06stream\x18\x02 \x01(\tR\x06stream\x12\x19\n" +
+	"\bbatch_id\x18\x03 \x01(\x03R\abatchId\x12\x1d\n" +
+	"\n" +
+	"batch_size\x18\x04 \x01(\x03R\tbatchSize\x123\n" +
+	"\bmessages\x18\x05 \x03(\v2\x17.redisstreamspb.MessageR\bmessages\x12\x1c\n" +
+	"\ttimestamp\x18\x06 \x01(\x03R\ttimestamp\"l\n" +
 	"\x1aCreateConsumerGroupRequest\x12\x14\n" +
 	"\x05topic\x18\x01 \x01(\tR\x05topic\x12\x1d\n" +
 	"\n" +
@@ -1431,7 +1541,7 @@ func file_redis_streams_proto_rawDescGZIP() []byte {
 	return file_redis_streams_proto_rawDescData
 }
 
-var file_redis_streams_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_redis_streams_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_redis_streams_proto_goTypes = []any{
 	(*PublishRequest)(nil),              // 0: redisstreamspb.PublishRequest
 	(*PublishResponse)(nil),             // 1: redisstreamspb.PublishResponse
@@ -1453,53 +1563,55 @@ var file_redis_streams_proto_goTypes = []any{
 	(*ConsumerGroupInfoRequest)(nil),    // 17: redisstreamspb.ConsumerGroupInfoRequest
 	(*ConsumerGroupInfo)(nil),           // 18: redisstreamspb.ConsumerGroupInfo
 	(*ConsumerGroupInfoResponse)(nil),   // 19: redisstreamspb.ConsumerGroupInfoResponse
-	(*CreateConsumerGroupRequest)(nil),  // 20: redisstreamspb.CreateConsumerGroupRequest
-	(*CreateConsumerGroupResponse)(nil), // 21: redisstreamspb.CreateConsumerGroupResponse
-	(*DeleteConsumerGroupRequest)(nil),  // 22: redisstreamspb.DeleteConsumerGroupRequest
-	(*DeleteConsumerGroupResponse)(nil), // 23: redisstreamspb.DeleteConsumerGroupResponse
-	nil,                                 // 24: redisstreamspb.PublishRequest.HeadersEntry
-	(*structpb.Struct)(nil),             // 25: google.protobuf.Struct
+	(*MessageBatch)(nil),                // 20: redisstreamspb.MessageBatch
+	(*CreateConsumerGroupRequest)(nil),  // 21: redisstreamspb.CreateConsumerGroupRequest
+	(*CreateConsumerGroupResponse)(nil), // 22: redisstreamspb.CreateConsumerGroupResponse
+	(*DeleteConsumerGroupRequest)(nil),  // 23: redisstreamspb.DeleteConsumerGroupRequest
+	(*DeleteConsumerGroupResponse)(nil), // 24: redisstreamspb.DeleteConsumerGroupResponse
+	nil,                                 // 25: redisstreamspb.PublishRequest.HeadersEntry
+	(*structpb.Struct)(nil),             // 26: google.protobuf.Struct
 }
 var file_redis_streams_proto_depIdxs = []int32{
-	25, // 0: redisstreamspb.PublishRequest.json:type_name -> google.protobuf.Struct
-	24, // 1: redisstreamspb.PublishRequest.headers:type_name -> redisstreamspb.PublishRequest.HeadersEntry
-	25, // 2: redisstreamspb.BatchMessage.fields:type_name -> google.protobuf.Struct
+	26, // 0: redisstreamspb.PublishRequest.json:type_name -> google.protobuf.Struct
+	25, // 1: redisstreamspb.PublishRequest.headers:type_name -> redisstreamspb.PublishRequest.HeadersEntry
+	26, // 2: redisstreamspb.BatchMessage.fields:type_name -> google.protobuf.Struct
 	2,  // 3: redisstreamspb.PublishBatchRequest.messages:type_name -> redisstreamspb.BatchMessage
-	25, // 4: redisstreamspb.Message.fields:type_name -> google.protobuf.Struct
+	26, // 4: redisstreamspb.Message.fields:type_name -> google.protobuf.Struct
 	6,  // 5: redisstreamspb.ReadStreamResponse.messages:type_name -> redisstreamspb.Message
 	6,  // 6: redisstreamspb.ReadRangeResponse.messages:type_name -> redisstreamspb.Message
 	18, // 7: redisstreamspb.ConsumerGroupInfoResponse.groups:type_name -> redisstreamspb.ConsumerGroupInfo
-	0,  // 8: redisstreamspb.RedisStreams.Publish:input_type -> redisstreamspb.PublishRequest
-	3,  // 9: redisstreamspb.RedisStreams.PublishBatch:input_type -> redisstreamspb.PublishBatchRequest
-	0,  // 10: redisstreamspb.RedisStreams.PublishStream:input_type -> redisstreamspb.PublishRequest
-	5,  // 11: redisstreamspb.RedisStreams.Subscribe:input_type -> redisstreamspb.SubscribeRequest
-	11, // 12: redisstreamspb.RedisStreams.ReadStream:input_type -> redisstreamspb.ReadStreamRequest
-	13, // 13: redisstreamspb.RedisStreams.ReadRange:input_type -> redisstreamspb.ReadRangeRequest
-	7,  // 14: redisstreamspb.RedisStreams.Ack:input_type -> redisstreamspb.AckRequest
-	7,  // 15: redisstreamspb.RedisStreams.AckBatch:input_type -> redisstreamspb.AckRequest
-	9,  // 16: redisstreamspb.RedisStreams.ListTopics:input_type -> redisstreamspb.ListTopicsRequest
-	15, // 17: redisstreamspb.RedisStreams.StreamInfo:input_type -> redisstreamspb.StreamInfoRequest
-	17, // 18: redisstreamspb.RedisStreams.ConsumerGroupInfo:input_type -> redisstreamspb.ConsumerGroupInfoRequest
-	20, // 19: redisstreamspb.RedisStreams.CreateConsumerGroup:input_type -> redisstreamspb.CreateConsumerGroupRequest
-	22, // 20: redisstreamspb.RedisStreams.DeleteConsumerGroup:input_type -> redisstreamspb.DeleteConsumerGroupRequest
-	1,  // 21: redisstreamspb.RedisStreams.Publish:output_type -> redisstreamspb.PublishResponse
-	4,  // 22: redisstreamspb.RedisStreams.PublishBatch:output_type -> redisstreamspb.PublishBatchResponse
-	4,  // 23: redisstreamspb.RedisStreams.PublishStream:output_type -> redisstreamspb.PublishBatchResponse
-	6,  // 24: redisstreamspb.RedisStreams.Subscribe:output_type -> redisstreamspb.Message
-	12, // 25: redisstreamspb.RedisStreams.ReadStream:output_type -> redisstreamspb.ReadStreamResponse
-	14, // 26: redisstreamspb.RedisStreams.ReadRange:output_type -> redisstreamspb.ReadRangeResponse
-	8,  // 27: redisstreamspb.RedisStreams.Ack:output_type -> redisstreamspb.AckResponse
-	8,  // 28: redisstreamspb.RedisStreams.AckBatch:output_type -> redisstreamspb.AckResponse
-	10, // 29: redisstreamspb.RedisStreams.ListTopics:output_type -> redisstreamspb.ListTopicsResponse
-	16, // 30: redisstreamspb.RedisStreams.StreamInfo:output_type -> redisstreamspb.StreamInfoResponse
-	19, // 31: redisstreamspb.RedisStreams.ConsumerGroupInfo:output_type -> redisstreamspb.ConsumerGroupInfoResponse
-	21, // 32: redisstreamspb.RedisStreams.CreateConsumerGroup:output_type -> redisstreamspb.CreateConsumerGroupResponse
-	23, // 33: redisstreamspb.RedisStreams.DeleteConsumerGroup:output_type -> redisstreamspb.DeleteConsumerGroupResponse
-	21, // [21:34] is the sub-list for method output_type
-	8,  // [8:21] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	6,  // 8: redisstreamspb.MessageBatch.messages:type_name -> redisstreamspb.Message
+	0,  // 9: redisstreamspb.RedisStreams.Publish:input_type -> redisstreamspb.PublishRequest
+	3,  // 10: redisstreamspb.RedisStreams.PublishBatch:input_type -> redisstreamspb.PublishBatchRequest
+	0,  // 11: redisstreamspb.RedisStreams.PublishStream:input_type -> redisstreamspb.PublishRequest
+	5,  // 12: redisstreamspb.RedisStreams.Subscribe:input_type -> redisstreamspb.SubscribeRequest
+	11, // 13: redisstreamspb.RedisStreams.ReadStream:input_type -> redisstreamspb.ReadStreamRequest
+	13, // 14: redisstreamspb.RedisStreams.ReadRange:input_type -> redisstreamspb.ReadRangeRequest
+	7,  // 15: redisstreamspb.RedisStreams.Ack:input_type -> redisstreamspb.AckRequest
+	7,  // 16: redisstreamspb.RedisStreams.AckBatch:input_type -> redisstreamspb.AckRequest
+	9,  // 17: redisstreamspb.RedisStreams.ListTopics:input_type -> redisstreamspb.ListTopicsRequest
+	15, // 18: redisstreamspb.RedisStreams.StreamInfo:input_type -> redisstreamspb.StreamInfoRequest
+	17, // 19: redisstreamspb.RedisStreams.ConsumerGroupInfo:input_type -> redisstreamspb.ConsumerGroupInfoRequest
+	21, // 20: redisstreamspb.RedisStreams.CreateConsumerGroup:input_type -> redisstreamspb.CreateConsumerGroupRequest
+	23, // 21: redisstreamspb.RedisStreams.DeleteConsumerGroup:input_type -> redisstreamspb.DeleteConsumerGroupRequest
+	1,  // 22: redisstreamspb.RedisStreams.Publish:output_type -> redisstreamspb.PublishResponse
+	4,  // 23: redisstreamspb.RedisStreams.PublishBatch:output_type -> redisstreamspb.PublishBatchResponse
+	4,  // 24: redisstreamspb.RedisStreams.PublishStream:output_type -> redisstreamspb.PublishBatchResponse
+	6,  // 25: redisstreamspb.RedisStreams.Subscribe:output_type -> redisstreamspb.Message
+	12, // 26: redisstreamspb.RedisStreams.ReadStream:output_type -> redisstreamspb.ReadStreamResponse
+	14, // 27: redisstreamspb.RedisStreams.ReadRange:output_type -> redisstreamspb.ReadRangeResponse
+	8,  // 28: redisstreamspb.RedisStreams.Ack:output_type -> redisstreamspb.AckResponse
+	8,  // 29: redisstreamspb.RedisStreams.AckBatch:output_type -> redisstreamspb.AckResponse
+	10, // 30: redisstreamspb.RedisStreams.ListTopics:output_type -> redisstreamspb.ListTopicsResponse
+	16, // 31: redisstreamspb.RedisStreams.StreamInfo:output_type -> redisstreamspb.StreamInfoResponse
+	19, // 32: redisstreamspb.RedisStreams.ConsumerGroupInfo:output_type -> redisstreamspb.ConsumerGroupInfoResponse
+	22, // 33: redisstreamspb.RedisStreams.CreateConsumerGroup:output_type -> redisstreamspb.CreateConsumerGroupResponse
+	24, // 34: redisstreamspb.RedisStreams.DeleteConsumerGroup:output_type -> redisstreamspb.DeleteConsumerGroupResponse
+	22, // [22:35] is the sub-list for method output_type
+	9,  // [9:22] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_redis_streams_proto_init() }
@@ -1513,7 +1625,7 @@ func file_redis_streams_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_redis_streams_proto_rawDesc), len(file_redis_streams_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   25,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

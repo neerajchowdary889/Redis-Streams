@@ -15,7 +15,7 @@ type Metrics struct {
 	messagesProcessed map[string]int64
 	publishErrors     map[string]int64
 	processingErrors  map[string]int64
-
+	messagesConsumed  map[string]int64
 	// Performance metrics
 	processingTimes map[string][]time.Duration
 	streamLengths   map[string]int64
@@ -40,6 +40,7 @@ func NewMetrics() *Metrics {
 		messagesProcessed: make(map[string]int64),
 		publishErrors:     make(map[string]int64),
 		processingErrors:  make(map[string]int64),
+		messagesConsumed:  make(map[string]int64),
 		processingTimes:   make(map[string][]time.Duration),
 		streamLengths:     make(map[string]int64),
 		activeConsumers:   make(map[string]int64),
@@ -73,6 +74,14 @@ func (m *Metrics) IncMessagesProcessed(topic string) {
 	m.lastUpdated = time.Now()
 }
 
+// AddMessagesProcessed adds multiple processed messages
+func (m *Metrics) AddMessagesProcessed(topic string, count int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.messagesProcessed[topic] += count
+	m.lastUpdated = time.Now()
+}
+
 // IncPublishErrors increments publish error count for a topic
 func (m *Metrics) IncPublishErrors(topic string) {
 	m.mu.Lock()
@@ -81,11 +90,26 @@ func (m *Metrics) IncPublishErrors(topic string) {
 	m.lastUpdated = time.Now()
 }
 
+func (m *Metrics) AddMessagesAcknowledged(topic string, count int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.messagesProcessed[topic] += count
+	m.lastUpdated = time.Now()
+}
+
 // IncProcessingErrors increments processing error count for a topic
 func (m *Metrics) IncProcessingErrors(topic string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.processingErrors[topic]++
+	m.lastUpdated = time.Now()
+}
+
+// AddProcessingErrors adds multiple processing errors
+func (m *Metrics) AddProcessingErrors(topic string, count int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.processingErrors[topic] += count
 	m.lastUpdated = time.Now()
 }
 
@@ -157,6 +181,13 @@ func (m *Metrics) GetMessagesProcessed(topic string) int64 {
 	return m.messagesProcessed[topic]
 }
 
+// GetMessagesConsumed returns consumed message count for a topic
+func (m *Metrics) GetMessagesConsumed(topic string) int64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.messagesConsumed[topic]
+}
+
 // GetProcessingErrors returns processing error count for a topic
 func (m *Metrics) GetProcessingErrors(topic string) int64 {
 	m.mu.RLock()
@@ -226,6 +257,7 @@ func (m *Metrics) GetAll() map[string]interface{} {
 		"messages_processed":     m.messagesProcessed,
 		"publish_errors":         m.publishErrors,
 		"processing_errors":      m.processingErrors,
+		"messages_consumed":      m.messagesConsumed,
 		"avg_processing_time_ms": avgProcessingTimes,
 		"stream_lengths":         m.streamLengths,
 		"active_consumers":       m.activeConsumers,
@@ -275,6 +307,30 @@ func (m *Metrics) GetHealthStatus() map[string]interface{} {
 	}
 }
 
+// Increment the Consumed Messages
+func (m *Metrics) IncConsumedMessages(topic string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.messagesConsumed[topic]++
+	m.lastUpdated = time.Now()
+}
+
+// AddConsumedMessages adds multiple consumed messages
+func (m *Metrics) AddConsumedMessages(topic string, count int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.messagesConsumed[topic] += count
+	m.lastUpdated = time.Now()
+}
+
+// Increment the Processed Messages
+func (m *Metrics) IncMessagesAcknowledged(topic string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.messagesProcessed[topic]++
+	m.lastUpdated = time.Now()
+}
+
 // Reset resets all metrics (useful for testing)
 func (m *Metrics) Reset() {
 	m.mu.Lock()
@@ -284,6 +340,7 @@ func (m *Metrics) Reset() {
 	m.messagesProcessed = make(map[string]int64)
 	m.publishErrors = make(map[string]int64)
 	m.processingErrors = make(map[string]int64)
+	m.messagesConsumed = make(map[string]int64)
 	m.processingTimes = make(map[string][]time.Duration)
 	m.streamLengths = make(map[string]int64)
 	m.activeConsumers = make(map[string]int64)
@@ -303,7 +360,7 @@ func (m *Metrics) GetSummary() map[string]interface{} {
 	totalProcessed := int64(0)
 	totalPublishErrors := int64(0)
 	totalProcessingErrors := int64(0)
-
+	totalConsumed := int64(0)
 	for _, count := range m.messagesPublished {
 		totalPublished += count
 	}
@@ -316,12 +373,15 @@ func (m *Metrics) GetSummary() map[string]interface{} {
 	for _, count := range m.processingErrors {
 		totalProcessingErrors += count
 	}
-
+	for _, count := range m.messagesConsumed {
+		totalConsumed += count
+	}
 	return map[string]interface{}{
 		"total_published":         totalPublished,
 		"total_processed":         totalProcessed,
 		"total_publish_errors":    totalPublishErrors,
 		"total_processing_errors": totalProcessingErrors,
+		"total_consumed":          totalConsumed,
 		"uptime_seconds":          time.Since(m.startTime).Seconds(),
 		"topic_count":             len(m.messagesPublished),
 	}

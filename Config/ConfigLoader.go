@@ -146,6 +146,11 @@ func (cl *ConfigLoader) loadFromEnv(config *Config) {
 
 // validateAndSetDefaults validates configuration and sets default values
 func (cl *ConfigLoader) validateAndSetDefaults(config *Config) error {
+
+	topic_config, err := TopicConfigLoader("Config/config.yml")
+	if err != nil {
+		return err
+	}
 	// Redis defaults
 	if config.Redis.Host == "" {
 		config.Redis.Host = "localhost"
@@ -289,10 +294,16 @@ func (cl *ConfigLoader) validateAndSetDefaults(config *Config) error {
 
 		// Set topic defaults
 		if topic.StreamName == "" {
-			config.Topics[i].StreamName = fmt.Sprintf("stream:%s", topic.Name)
+			config.Topics[i].StreamName = topic_config.GetStreamName(topic.Name)
+			if config.Topics[i].StreamName == "" {
+				return fmt.Errorf("stream name not configured for topic '%s'", topic.Name)
+			}
 		}
 		if topic.ConsumerGroup == "" {
-			config.Topics[i].ConsumerGroup = fmt.Sprintf("group:%s", topic.Name)
+			config.Topics[i].ConsumerGroup = topic_config.GetStreamConsumerPairs()[topic.Name]["consumer_group"]
+			if config.Topics[i].ConsumerGroup == "" {
+				return fmt.Errorf("consumer group not configured for topic '%s'", topic.Name)
+			}
 		}
 		if topic.MaxLen == 0 {
 			config.Topics[i].MaxLen = config.Streams.DefaultMaxLen
@@ -389,3 +400,5 @@ func SaveConfig(config *Config, filePath string) error {
 
 	return nil
 }
+
+

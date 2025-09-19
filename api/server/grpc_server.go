@@ -53,7 +53,7 @@ func NewRedisStreamsServer(mqClient *mq.RedisStreamMQ, cfg *RSconfig.Config) *Re
 	server.messagePool = sync.Pool{
 		New: func() interface{} {
 			return &pb.Message{
-				Fields: &structpb.Struct{},
+				Fields: &structpb.Struct{Fields: make(map[string]*structpb.Value)},
 			}
 		},
 	}
@@ -112,21 +112,52 @@ func (s *RedisStreamsServer) PublishStream(stream pb.RedisStreams_PublishStreamS
 	ticker := time.NewTicker(flushInterval)
 	defer ticker.Stop()
 
+	ctx := stream.Context()
+
+	// Channel to receive messages from stream
+	msgChan := make(chan *pb.PublishRequest, batchSize)
+	errChan := make(chan error, 1)
+
+	// Goroutine to receive messages
+	go func() {
+		defer close(msgChan)
+		for {
+			req, err := stream.Recv()
+			if err != nil {
+				errChan <- err
+				return
+			}
+
+			select {
+			case msgChan <- req:
+			case <-ctx.Done():
+				errChan <- ctx.Err()
+				return
+			}
+		}
+	}()
+
 	flush := func() error {
 		if len(batch) == 0 {
 			return nil
 		}
 
-		// Process batch in parallel
+		// Create a copy for async processing
+		batchCopy := make([]mq.BatchMessage, len(batch))
+		copy(batchCopy, batch)
+
 		select {
 		case s.workerPool <- struct{}{}:
-			go func(msgs []mq.BatchMessage) {
+			go func() {
 				defer func() { <-s.workerPool }()
-				s.mq.PublishBatch(msgs)
-			}(batch)
+				if err := s.mq.PublishBatch(batchCopy); err != nil {
+					// Log error - can't return it in async context
+					fmt.Printf("PublishBatch error: %v\n", err)
+				}
+			}()
 		default:
 			// Fallback to synchronous processing
-			if err := s.mq.PublishBatch(batch); err != nil {
+			if err := s.mq.PublishBatch(batchCopy); err != nil {
 				return err
 			}
 		}
@@ -137,25 +168,31 @@ func (s *RedisStreamsServer) PublishStream(stream pb.RedisStreams_PublishStreamS
 
 	for {
 		select {
+		case <-ctx.Done():
+			return flush() // Final flush before shutdown
+
 		case <-ticker.C:
 			if err := flush(); err != nil {
 				return err
 			}
-		default:
-			req, err := stream.Recv()
-			if err != nil {
-				// Flush remaining messages before returning
-				if err := flush(); err != nil {
+
+		case req, ok := <-msgChan:
+			if !ok {
+				// Channel closed, check for error
+				if err := <-errChan; err != nil {
+					// Final flush before returning error
+					flush()
 					return err
 				}
-				return err
+				// Normal completion
+				return flush()
 			}
 
-			// Convert to batch message
+			// Process message
 			fields := req.Json.AsMap()
 			batch = append(batch, mq.BatchMessage{
 				Topic:  req.Topic,
-				ID:     "*", // Auto-generate ID
+				ID:     "*",
 				Fields: fields,
 			})
 
@@ -227,36 +264,132 @@ func (s *RedisStreamsServer) publishBatchParallel(ctx context.Context, req *pb.P
 }
 
 func (s *RedisStreamsServer) Subscribe(req *pb.SubscribeRequest, stream pb.RedisStreams_SubscribeServer) error {
+	fmt.Printf("gRPC Server: Subscribe method called with request: %+v\n", req)
+
+	// Get the stream context to detect client disconnection
+	ctx := stream.Context()
+	var topic_config *RSconfig.LoadTopicConfig
+	var err error
+
+	if req.ConsumerGroup == "" || req.ConsumerName == "" {
+		// Read from the config.yml file
+		topic_config, err = RSconfig.TopicConfigLoader("Config/config.yml")
+		if err != nil {
+			return err
+		}
+	}
+
+	if req.ConsumerGroup == "" {
+		pairs := topic_config.GetStreamConsumerPairs()
+		req.ConsumerGroup = pairs[req.Topic]["consumer_group"]
+	}
+
+	if req.ConsumerName == "" {
+
+		pairs := topic_config.GetStreamConsumerPairs()
+		req.ConsumerName = pairs[req.Topic]["consumer_name"]
+	}
+
 	conf := mq.ConsumerConfig{
 		TopicName:       req.Topic,
 		ConsumerName:    req.ConsumerName,
+		StartID:         ">", // Read new messages only for production
+		ConsumerGroup:   req.ConsumerGroup,
 		BatchSize:       req.BatchSize,
 		BlockTimeout:    time.Duration(req.BlockTimeoutMs) * time.Millisecond,
 		ConsumerTimeout: time.Duration(req.ConsumerTimeoutMs) * time.Millisecond,
 		AutoAck:         req.AutoAck,
 	}
 
-	// Use message pool for better memory efficiency
-	handler := func(ctx context.Context, topic, id string, fields map[string]interface{}) error {
-		msg := s.messagePool.Get().(*pb.Message)
-		msg.Topic = topic
-		msg.Id = id
-		msg.Fields = toStruct(fields)
+	// Batch processing variables
+	var lastProcessedID string = "0"
 
-		err := stream.Send(msg)
+	// Pass the stream context to the subscription
+	fmt.Printf("gRPC Server: Calling mq.SubscribeBatch with config: %+v\n", conf)
 
-		// Return to pool
-		s.messagePool.Put(msg)
-		return err
+	// Create batch handler that processes entire batches
+	batchHandler := func(ctx context.Context, topic string, messages []redis.XMessage) error {
+		// Check if client is still connected
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		fmt.Printf("gRPC Server: Received TRUE batch of %d messages\n", len(messages))
+
+		// Convert entire batch to protobuf messages at once
+		pbMessages := make([]*pb.Message, 0, len(messages))
+		for _, msg := range messages {
+			// Convert Redis message to protobuf message
+			pbMsg := &pb.Message{
+				Topic:  topic,
+				Id:     msg.ID,
+				Fields: toStruct(msg.Values),
+			}
+			pbMessages = append(pbMessages, pbMsg)
+			lastProcessedID = msg.ID
+		}
+
+		// Send the entire batch at once
+		fmt.Printf("gRPC Server: Sending TRUE batch of %d messages (last ID: %s)\n", len(pbMessages), lastProcessedID)
+		if err := s.sendBatch(stream, pbMessages, lastProcessedID); err != nil {
+			return err
+		}
+
+		return nil
 	}
 
-	return s.mq.Subscribe(conf, handler)
+	// Start the subscription in a goroutine
+	subscriptionDone := make(chan error, 1)
+	go func() {
+		err := s.mq.SubscribeBatch(conf, batchHandler)
+		subscriptionDone <- err
+	}()
+
+	// Wait for either the subscription to complete or the client to disconnect
+	select {
+	case err := <-subscriptionDone:
+		if err != nil {
+			fmt.Printf("gRPC Server: mq.SubscribeBatch failed: %v\n", err)
+			return err
+		}
+		fmt.Printf("gRPC Server: mq.SubscribeBatch succeeded\n")
+	case <-ctx.Done():
+		fmt.Printf("gRPC Server: Client disconnected, ending subscription\n")
+		return nil
+	}
+
+	// Wait for the stream context to be done (client disconnects)
+	<-ctx.Done()
+
+	fmt.Printf("gRPC Server: Client disconnected, ending subscription\n")
+	return nil
+}
+
+// sendBatch sends a batch of messages to the client
+func (s *RedisStreamsServer) sendBatch(stream pb.RedisStreams_SubscribeServer, messages []*pb.Message, lastID string) error {
+	if len(messages) == 0 {
+		return nil
+	}
+
+	fmt.Printf("gRPC Server: Sending batch of %d messages (last ID: %s)\n", len(messages), lastID)
+
+	// Send all messages in the batch
+	for _, msg := range messages {
+		if err := stream.Send(msg); err != nil {
+			return fmt.Errorf("failed to send message in batch: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (s *RedisStreamsServer) Ack(ctx context.Context, req *pb.AckRequest) (*pb.AckResponse, error) {
 	if err := s.mq.AckMessage(req.Topic, req.ConsumerGroup, req.Id); err != nil {
 		return nil, err
 	}
+	// ACK tracking is handled in mq.AckMessage()
 	return &pb.AckResponse{}, nil
 }
 
@@ -269,31 +402,71 @@ func (s *RedisStreamsServer) AckBatch(stream pb.RedisStreams_AckBatchServer) err
 	ticker := time.NewTicker(flushInterval)
 	defer ticker.Stop()
 
+	ctx := stream.Context()
+
+	// Channel to receive ACK requests from stream
+	ackChan := make(chan *pb.AckRequest, batchSize)
+	errChan := make(chan error, 1)
+
+	// Goroutine to receive ACK requests
+	go func() {
+		defer close(ackChan)
+		for {
+			req, err := stream.Recv()
+			if err != nil {
+				errChan <- err
+				return
+			}
+
+			select {
+			case ackChan <- req:
+			case <-ctx.Done():
+				errChan <- ctx.Err()
+				return
+			}
+		}
+	}()
+
 	flush := func() error {
 		if len(acks) == 0 {
 			return nil
 		}
 
-		// Process ACKs in parallel
+		// Create a copy of ACK data for processing
+		ackData := make([]struct {
+			topic, consumerGroup, id string
+		}, len(acks))
+
+		for i, ack := range acks {
+			ackData[i] = struct {
+				topic, consumerGroup, id string
+			}{
+				topic:         ack.Topic,
+				consumerGroup: ack.ConsumerGroup,
+				id:            ack.Id,
+			}
+			// Return to pool immediately after copying data
+			s.ackPool.Put(ack)
+		}
+
+		// Process ACKs
 		select {
 		case s.workerPool <- struct{}{}:
-			go func(ackList []*pb.AckRequest) {
+			go func() {
 				defer func() { <-s.workerPool }()
-				for _, ack := range ackList {
-					s.mq.AckMessage(ack.Topic, ack.ConsumerGroup, ack.Id)
-					// Return to pool
-					s.ackPool.Put(ack)
+				for _, data := range ackData {
+					if err := s.mq.AckMessage(data.topic, data.consumerGroup, data.id); err != nil {
+						// Log error - can't return in async context
+						fmt.Printf("AckMessage error: %v\n", err)
+					}
 				}
-			}(acks)
+			}()
 		default:
 			// Fallback to synchronous processing
-			for _, ack := range acks {
-				if err := s.mq.AckMessage(ack.Topic, ack.ConsumerGroup, ack.Id); err != nil {
-					// Return to pool
-					s.ackPool.Put(ack)
+			for _, data := range ackData {
+				if err := s.mq.AckMessage(data.topic, data.consumerGroup, data.id); err != nil {
 					return err
 				}
-				s.ackPool.Put(ack)
 			}
 		}
 
@@ -303,18 +476,24 @@ func (s *RedisStreamsServer) AckBatch(stream pb.RedisStreams_AckBatchServer) err
 
 	for {
 		select {
+		case <-ctx.Done():
+			return flush() // Final flush before shutdown
+
 		case <-ticker.C:
 			if err := flush(); err != nil {
 				return err
 			}
-		default:
-			req, err := stream.Recv()
-			if err != nil {
-				// Flush remaining ACKs before returning
-				if err := flush(); err != nil {
+
+		case req, ok := <-ackChan:
+			if !ok {
+				// Channel closed, check for error
+				if err := <-errChan; err != nil {
+					// Final flush before returning error
+					flush()
 					return err
 				}
-				return err
+				// Normal completion
+				return flush()
 			}
 
 			acks = append(acks, req)
@@ -340,10 +519,18 @@ func (s *RedisStreamsServer) ReadStream(ctx context.Context, req *pb.ReadStreamR
 	if !exists {
 		return nil, fmt.Errorf("topic '%s' not configured", req.Topic)
 	}
-
-	streamName := topic.StreamName
+	var streamName string
+	streamName = topic.StreamName
 	if streamName == "" {
-		streamName = fmt.Sprintf("stream:%s", req.Topic)
+		// get from config.yml
+		Temp, err := RSconfig.TopicConfigLoader("Config/config.yml")
+		if err != nil {
+			return nil, err
+		}
+		streamName = Temp.GetStreamName(req.Topic)
+		if streamName == "" {
+			return nil, fmt.Errorf("stream name not configured for topic '%s'", req.Topic)
+		}
 	}
 
 	// Set defaults
@@ -353,7 +540,7 @@ func (s *RedisStreamsServer) ReadStream(ctx context.Context, req *pb.ReadStreamR
 	}
 	count := req.Count
 	if count == 0 {
-		count = 100 // default limit
+		count = 10000 // default limit
 	}
 
 	var messages []redis.XMessage
@@ -413,10 +600,18 @@ func (s *RedisStreamsServer) ReadRange(ctx context.Context, req *pb.ReadRangeReq
 	if !exists {
 		return nil, fmt.Errorf("topic '%s' not configured", req.Topic)
 	}
-
-	streamName := topic.StreamName
+	var streamName string
+	streamName = topic.StreamName
 	if streamName == "" {
-		streamName = fmt.Sprintf("stream:%s", req.Topic)
+		// get from config.yml
+		topic_config, err := RSconfig.TopicConfigLoader("Config/config.yml")
+		if err != nil {
+			return nil, err
+		}
+		streamName = topic_config.GetStreamName(req.Topic)
+		if streamName == "" {
+			return nil, fmt.Errorf("stream name not configured for topic '%s'", req.Topic)
+		}
 	}
 
 	startID := req.StartId
@@ -461,9 +656,18 @@ func (s *RedisStreamsServer) StreamInfo(ctx context.Context, req *pb.StreamInfoR
 		return nil, fmt.Errorf("topic '%s' not configured", req.Topic)
 	}
 
-	streamName := topic.StreamName
+	var streamName string
+	streamName = topic.StreamName
 	if streamName == "" {
-		streamName = fmt.Sprintf("stream:%s", req.Topic)
+		// get from config.yml
+		topic_config, err := RSconfig.TopicConfigLoader("Config/config.yml")
+		if err != nil {
+			return nil, err
+		}
+		streamName = topic_config.GetStreamName(req.Topic)
+		if streamName == "" {
+			return nil, fmt.Errorf("stream name not configured for topic '%s'", req.Topic)
+		}
 	}
 
 	info, err := s.client.XInfoStream(ctx, streamName).Result()
@@ -477,7 +681,7 @@ func (s *RedisStreamsServer) StreamInfo(ctx context.Context, req *pb.StreamInfoR
 		LastEntryId:  info.LastEntry.ID,
 		EntriesAdded: info.EntriesAdded,
 		Groups:       info.Groups,
-		Consumers:    s.getTotalConsumers(streamName),
+		Consumers:    s.getTotalConsumers(topic.StreamName),
 	}, nil
 }
 
@@ -488,9 +692,18 @@ func (s *RedisStreamsServer) ConsumerGroupInfo(ctx context.Context, req *pb.Cons
 		return nil, fmt.Errorf("topic '%s' not configured", req.Topic)
 	}
 
-	streamName := topic.StreamName
+	var streamName string
+	streamName = topic.StreamName
 	if streamName == "" {
-		streamName = fmt.Sprintf("stream:%s", req.Topic)
+		// get from config.yml
+		topic_config, err := RSconfig.TopicConfigLoader("Config/config.yml")
+		if err != nil {
+			return nil, err
+		}
+		streamName = topic_config.GetStreamName(req.Topic)
+		if streamName == "" {
+			return nil, fmt.Errorf("stream name not configured for topic '%s'", req.Topic)
+		}
 	}
 
 	// Get detailed group information
@@ -521,9 +734,18 @@ func (s *RedisStreamsServer) CreateConsumerGroup(ctx context.Context, req *pb.Cr
 		return nil, fmt.Errorf("topic '%s' not configured", req.Topic)
 	}
 
-	streamName := topic.StreamName
+	var streamName string
+	streamName = topic.StreamName
 	if streamName == "" {
-		streamName = fmt.Sprintf("stream:%s", req.Topic)
+		// get from config.yml
+		topic_config, err := RSconfig.TopicConfigLoader("Config/config.yml")
+		if err != nil {
+			return nil, err
+		}
+		streamName = topic_config.GetStreamName(req.Topic)
+		if streamName == "" {
+			return nil, fmt.Errorf("stream name not configured for topic '%s'", req.Topic)
+		}
 	}
 
 	startID := req.StartId
@@ -546,9 +768,18 @@ func (s *RedisStreamsServer) DeleteConsumerGroup(ctx context.Context, req *pb.De
 		return nil, fmt.Errorf("topic '%s' not configured", req.Topic)
 	}
 
-	streamName := topic.StreamName
+	var streamName string
+	streamName = topic.StreamName
 	if streamName == "" {
-		streamName = fmt.Sprintf("stream:%s", req.Topic)
+		// get from config.yml
+		topic_config, err := RSconfig.TopicConfigLoader("Config/config.yml")
+		if err != nil {
+			return nil, err
+		}
+		streamName = topic_config.GetStreamName(req.Topic)
+		if streamName == "" {
+			return nil, fmt.Errorf("stream name not configured for topic '%s'", req.Topic)
+		}
 	}
 
 	err := s.client.XGroupDestroy(ctx, streamName, req.GroupName).Err()
@@ -576,6 +807,14 @@ func (s *RedisStreamsServer) getTotalConsumers(streamName string) int64 {
 
 // toStruct converts a map to protobuf Struct
 func toStruct(m map[string]interface{}) *structpb.Struct {
-	s, _ := structpb.NewStruct(m)
+	if m == nil {
+		return &structpb.Struct{Fields: make(map[string]*structpb.Value)}
+	}
+
+	s, err := structpb.NewStruct(m)
+	if err != nil {
+		fmt.Printf("Error converting map to struct: %v\n", err)
+		return &structpb.Struct{Fields: make(map[string]*structpb.Value)}
+	}
 	return s
 }

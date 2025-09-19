@@ -9,10 +9,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	RSconfig "RedisStreams/Config"
 	"RedisStreams/Health"
 	RDLogging "RedisStreams/Logging"
+	"RedisStreams/MRE"
 	RDMetrics "RedisStreams/Metrics"
 	"RedisStreams/QueueModule"
 	pb "RedisStreams/api/proto"
@@ -28,8 +30,42 @@ func main() {
 		grpcPort   = flag.Int("grpc-port", 16001, "gRPC server port")
 		healthPort = flag.Int("health-port", 8080, "Health check server port")
 		configPath = flag.String("config", "Config/config.yml", "Configuration file path")
+		Testing    = flag.Bool("testing", false, "Testing mode")
 	)
 	flag.Parse()
+
+	if *Testing {
+		log.Println("=== Testing Mode: MRE Lookup Consumer ===")
+
+		config := MRE.DefaultMRELookupConsumerConfig("localhost:16001")
+		config.BatchSize = 50000      // Up to 50k messages per batch
+		config.ProcessingWorkers = 16 // More workers for high throughput
+		config.EnableMetrics = true
+		config.StatsInterval = 2 * time.Second
+		consumer, err := MRE.NewMRELookupConsumer(config)
+		if err != nil {
+			log.Fatalf("Failed to create consumer: %v", err)
+		}
+		defer consumer.Close()
+
+		if err := consumer.Start(); err != nil {
+			log.Fatalf("Failed to start consumer: %v", err)
+		}
+
+		log.Println("Consumer started successfully. Waiting for messages...")
+		log.Println("Press Ctrl+C to stop the consumer.")
+
+		// Wait for shutdown signal
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+		<-sigChan
+
+		log.Println("Shutdown signal received, stopping consumer...")
+		if err := consumer.Stop(); err != nil {
+			log.Printf("Error stopping consumer: %v", err)
+		}
+		return
+	}
 
 	// Load configuration
 	config, err := RSconfig.LoadConfigFromPath(*configPath)
