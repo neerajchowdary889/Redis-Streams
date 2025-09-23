@@ -461,11 +461,16 @@ func (mq *RedisStreamMQ) Subscribe(consumerConfig ConsumerConfig, handler Messag
 	}
 
 	if !groupExists {
-		return fmt.Errorf("consumer group '%s' does not exist for stream '%s'. Available groups: %v",
-			groupName, streamName, getGroupNames(groups))
+		// Create the consumer group automatically
+		mq.logger.Info("Consumer group does not exist, creating it", "group", groupName, "stream", streamName)
+		err := mq.client.XGroupCreateMkStream(ctx, streamName, groupName, "0").Err()
+		if err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
+			return fmt.Errorf("failed to create consumer group '%s' for stream '%s': %w", groupName, streamName, err)
+		}
+		mq.logger.Info("Consumer group created successfully", "group", groupName, "stream", streamName)
 	}
 
-	// Group exists, use the provided StartID for reading
+	// Group exists or was created, use the provided StartID for reading
 	if consumerConfig.StartID == "" {
 		// For existing groups, start from "0" to process pending messages
 		consumerConfig.StartID = "0"
@@ -496,7 +501,7 @@ func (mq *RedisStreamMQ) Subscribe(consumerConfig ConsumerConfig, handler Messag
 	return nil
 }
 
-// SubscribeBatch creates a consumer and starts consuming messages in batches
+// SubscribeBatchEnhanced creates a consumer with MRE Consumer patterns for robust batch processing
 func (mq *RedisStreamMQ) SubscribeBatch(consumerConfig ConsumerConfig, handler BatchMessageHandler) error {
 	// In this case two instances calling the same obj
 	var topic_config *RSconfig.LoadTopicConfig
@@ -548,7 +553,7 @@ func (mq *RedisStreamMQ) SubscribeBatch(consumerConfig ConsumerConfig, handler B
 		consumerConfig.ConsumerTimeout = mq.config.Consumers.DefaultConsumerTimeout
 	}
 	if consumerConfig.StartID == "" {
-		consumerConfig.StartID = "0" // Start from beginning to process all messages including pending
+		consumerConfig.StartID = ">" // Read new messages by default for consumer groups
 	}
 
 	// Check if consumer group exists first
@@ -576,14 +581,13 @@ func (mq *RedisStreamMQ) SubscribeBatch(consumerConfig ConsumerConfig, handler B
 	}
 
 	if !groupExists {
-		return fmt.Errorf("consumer group '%s' does not exist for stream '%s'. Available groups: %v",
-			groupName, streamName, getGroupNames(groups))
-	}
-
-	// Group exists, use the provided StartID for reading
-	if consumerConfig.StartID == "" {
-		// For existing groups, start from "0" to process pending messages
-		consumerConfig.StartID = "0"
+		// Create the consumer group automatically
+		mq.logger.Info("Consumer group does not exist, creating it", "group", groupName, "stream", streamName)
+		err := mq.client.XGroupCreateMkStream(ctx, streamName, groupName, "0").Err()
+		if err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
+			return fmt.Errorf("failed to create consumer group '%s' for stream '%s': %w", groupName, streamName, err)
+		}
+		mq.logger.Info("Consumer group created successfully", "group", groupName, "stream", streamName)
 	}
 
 	// Create consumer
@@ -599,11 +603,11 @@ func (mq *RedisStreamMQ) SubscribeBatch(consumerConfig ConsumerConfig, handler B
 	mq.activeConsumers[consumerKey] = consumer
 	mq.mu.Unlock()
 
-	// Start consuming
+	// Start consuming with enhanced patterns
 	mq.wg.Add(1)
 	go mq.consumeMessagesBatch(streamName, groupName, consumer, handler)
 
-	mq.logger.Info("Batch consumer started",
+	mq.logger.Info("Enhanced batch consumer started",
 		"topic", consumerConfig.TopicName,
 		"consumer", consumerConfig.ConsumerName,
 		"group", groupName,
@@ -631,11 +635,14 @@ func (mq *RedisStreamMQ) consumeMessages(streamName, groupName string, consumer 
 	for {
 		select {
 		case <-mq.ctx.Done():
+			mq.logger.Debug("Consumer stopping due to context cancellation")
 			return
 		case <-consumer.StopChan:
+			mq.logger.Debug("Consumer stopping due to stop signal")
 			return
 		default:
-			ctx, cancel := context.WithTimeout(mq.ctx, config.BlockTimeout+time.Second)
+			// Create context with proper timeout for blocking read
+			ctx, cancel := context.WithTimeout(mq.ctx, config.BlockTimeout)
 
 			// Determine start position to avoid duplicates
 			startID := lastProcessedID
@@ -646,7 +653,7 @@ func (mq *RedisStreamMQ) consumeMessages(streamName, groupName string, consumer 
 			streams, err := mq.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 				Group:    groupName,
 				Consumer: config.ConsumerName,
-				Streams:  []string{streamName, startID}, // Read from last processed position
+				Streams:  []string{streamName, startID},
 				Count:    config.BatchSize,
 				Block:    config.BlockTimeout,
 			}).Result()
@@ -654,24 +661,33 @@ func (mq *RedisStreamMQ) consumeMessages(streamName, groupName string, consumer 
 			cancel()
 
 			if err != nil {
-				if err == redis.Nil {
-					// No new messages, continue polling
+				// Handle different error types appropriately
+				switch {
+				case err == redis.Nil:
+					// No new messages - this is normal, continue polling
+					continue
+				case err == context.Canceled:
+					// Context was canceled - check if it's due to shutdown
+					select {
+					case <-mq.ctx.Done():
+						return
+					case <-consumer.StopChan:
+						return
+					default:
+						// Unexpected cancellation, log and continue
+						mq.logger.Warn("Unexpected context cancellation", "error", err)
+						continue
+					}
+				case err == context.DeadlineExceeded:
+					// Timeout is expected when no messages arrive - continue polling
+					continue
+				default:
+					// Real error - log and retry with backoff
+					mq.logger.Error("Error reading from stream",
+						"stream", streamName, "error", err)
+					time.Sleep(time.Second)
 					continue
 				}
-
-				// Check if it's a context timeout (expected behavior)
-				if strings.Contains(err.Error(), "context deadline exceeded") ||
-					strings.Contains(err.Error(), "context canceled") {
-					// This is expected when no messages arrive within the timeout
-					// Don't log as error, just continue
-					continue
-				}
-
-				// Log other errors
-				mq.logger.Error("Error reading from stream",
-					"stream", streamName, "error", err)
-				time.Sleep(time.Second)
-				continue
 			}
 
 			// Process messages in batches
@@ -683,7 +699,7 @@ func (mq *RedisStreamMQ) consumeMessages(streamName, groupName string, consumer 
 					// Track batch consumption
 					mq.metrics.AddConsumedMessages(config.TopicName, int64(len(stream.Messages)))
 
-					// Log batch size
+					// Log batch size only for large batches to reduce log noise
 					if len(stream.Messages) >= 1000 {
 						mq.logger.Info("Processing large batch",
 							"stream", stream.Stream,
@@ -699,8 +715,12 @@ func (mq *RedisStreamMQ) consumeMessages(streamName, groupName string, consumer 
 	}
 }
 
-// consumeMessagesBatch handles batch message consumption
-func (mq *RedisStreamMQ) consumeMessagesBatch(streamName, groupName string, consumer *Consumer, handler BatchMessageHandler) {
+// consumeMessagesBatchEnhanced handles batch message consumption with MRE Consumer patterns
+func (mq *RedisStreamMQ) consumeMessagesBatch(
+	streamName, groupName string,
+	consumer *Consumer,
+	handler BatchMessageHandler,
+) {
 	defer mq.wg.Done()
 	defer func() {
 		mq.mu.Lock()
@@ -709,81 +729,108 @@ func (mq *RedisStreamMQ) consumeMessagesBatch(streamName, groupName string, cons
 	}()
 
 	config := consumer.Config
-	var lastProcessedID string = config.StartID
-	if lastProcessedID == "" {
-		lastProcessedID = ">" // Start from new messages by default
-	}
+	var batchCount int64
+	logPrefix := fmt.Sprintf("[enhanced:%s]", config.ConsumerName)
 
-	// First, try to claim pending messages
-	mq.logger.Info("Starting batch consumer, checking for pending messages...")
-	mq.claimPendingMessagesBatch(streamName, groupName, config, handler)
+	// Exponential backoff for error handling
+	backoff := 100 * time.Millisecond
+	maxBackoff := 5 * time.Second
+
+	// Skip initial claiming - let the consumer loop handle it
+	// mq.claimPendingMessagesEnhanced(streamName, groupName, config, handler, logPrefix)
+
+	mq.logger.Info("Enhanced batch consumer starting main loop", "stream", streamName, "group", groupName)
 
 	for {
 		select {
 		case <-mq.ctx.Done():
+			mq.logger.Debug("Enhanced batch consumer stopping due to context cancellation")
 			return
 		case <-consumer.StopChan:
+			mq.logger.Debug("Enhanced batch consumer stopping due to stop signal")
 			return
 		default:
-			ctx, cancel := context.WithTimeout(mq.ctx, config.BlockTimeout+time.Second)
+			// Create context with proper timeout for blocking read
+			ctx, cancel := context.WithTimeout(mq.ctx, config.BlockTimeout+2*time.Second)
 
-			// Use ">" to read from consumer group's current position
-			startID := ">"
+			// Use the StartID from config (will be ">" for new messages)
+			startID := config.StartID
 
-			mq.logger.Info("Batch XReadGroup call",
-				"stream", streamName,
-				"startID", startID,
-				"batchSize", config.BatchSize,
-				"blockTimeout", config.BlockTimeout)
+			mq.logger.Debug("Calling XReadGroup", "stream", streamName, "group", groupName, "consumer", config.ConsumerName, "startID", startID)
 
 			streams, err := mq.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 				Group:    groupName,
 				Consumer: config.ConsumerName,
-				Streams:  []string{streamName, startID}, // Read from last processed position
+				Streams:  []string{streamName, startID}, // use StartID from config
 				Count:    config.BatchSize,
 				Block:    config.BlockTimeout,
 			}).Result()
 
 			cancel()
 
+			mq.logger.Debug("XReadGroup completed", "error", err, "streams_count", len(streams))
+
 			if err != nil {
-				if err == redis.Nil {
-					// No new messages, continue polling
+				// Handle different error types appropriately (MRE Consumer pattern)
+				switch {
+				case err == redis.Nil:
+					// No new messages - this is normal, continue polling
+					continue
+				case err == context.Canceled:
+					// Context was canceled - check if it's due to shutdown
+					select {
+					case <-mq.ctx.Done():
+						return
+					case <-consumer.StopChan:
+						return
+					default:
+						// Unexpected cancellation, log and continue
+						mq.logger.Warn("Unexpected context cancellation in enhanced batch consumer", "error", err)
+						continue
+					}
+				case err == context.DeadlineExceeded:
+					// Timeout is expected when no messages arrive - continue polling
+					continue
+				default:
+					// Real error - log and retry with exponential backoff
+					mq.logger.Error("Error reading stream in enhanced batch consumer", "error", err)
+					time.Sleep(backoff)
+					backoff = minDuration(maxBackoff, time.Duration(float64(backoff)*1.5))
 					continue
 				}
-
-				// Check if it's a context timeout (expected behavior)
-				if strings.Contains(err.Error(), "context deadline exceeded") ||
-					strings.Contains(err.Error(), "context canceled") {
-					// This is expected when no messages arrive within the timeout
-					// Don't log as error, just continue
-					continue
-				}
-
-				// Log other errors
-				mq.logger.Error("Error reading from stream",
-					"stream", streamName, "error", err)
-				time.Sleep(time.Second)
-				continue
 			}
+			backoff = 100 * time.Millisecond // Reset backoff on success
 
 			// Process messages in batches
 			for _, stream := range streams {
-				if len(stream.Messages) > 0 {
-					// Update last processed ID to the last message in the batch BEFORE processing
-					lastProcessedID = stream.Messages[len(stream.Messages)-1].ID
+				if len(stream.Messages) == 0 {
+					continue
+				}
 
-					// Track batch consumption
-					mq.metrics.AddConsumedMessages(config.TopicName, int64(len(stream.Messages)))
+				// Track batch consumption
+				mq.metrics.AddConsumedMessages(config.TopicName, int64(len(stream.Messages)))
+				batchCount++
 
-					// Log batch size
-					mq.logger.Info("Processing batch",
+				// Process the entire batch at once with enhanced error handling
+				if err := mq.processBatchWithHandler(stream.Stream, groupName, config, stream.Messages, handler, logPrefix); err != nil {
+					// Leave them pending for retry/claim later
+					mq.logger.Error("Enhanced batch processing error (left unacked)", "error", err, "batch_size", len(stream.Messages))
+					mq.metrics.AddProcessingErrors(config.TopicName, int64(len(stream.Messages)))
+				}
+
+				// Process messages with the configured StartID (typically ">" for new messages)
+
+				// Recovery cadence: after some batches, try a quick claim pass to help herd stuck messages
+				if batchCount%25 == 0 {
+					mq.claimPendingMessagesEnhanced(streamName, groupName, config, handler, logPrefix)
+				}
+
+				// Log progress (only for large batches to reduce noise)
+				if len(stream.Messages) >= 1000 {
+					mq.logger.Info("Enhanced batch processed",
 						"stream", stream.Stream,
 						"batch_size", len(stream.Messages),
-						"last_id", lastProcessedID)
-
-					// Process the entire batch at once using the batch handler
-					mq.processBatchWithHandler(stream.Stream, groupName, config, stream.Messages, handler)
+						"total_batches", batchCount)
 				}
 			}
 		}
@@ -1219,20 +1266,30 @@ func (mq *RedisStreamMQ) collectMetrics() {
 func (mq *RedisStreamMQ) Close() error {
 	mq.logger.Info("Shutting down Redis Streams MQ client...")
 
+	// Cancel context first to signal all operations to stop
+	mq.cancel()
+
 	// Signal all consumers to stop
 	mq.mu.Lock()
+	consumerCount := len(mq.activeConsumers)
 	for _, consumer := range mq.activeConsumers {
 		if consumer.IsRunning {
-			close(consumer.StopChan)
+			select {
+			case <-consumer.StopChan:
+				// Already closed
+			default:
+				close(consumer.StopChan)
+			}
 			consumer.IsRunning = false
 		}
 	}
 	mq.mu.Unlock()
 
-	// Cancel context
-	mq.cancel()
+	if consumerCount > 0 {
+		mq.logger.Info("Stopping consumers", "count", consumerCount)
+	}
 
-	// Wait for consumers to stop
+	// Wait for consumers to stop with timeout
 	done := make(chan struct{})
 	go func() {
 		mq.wg.Wait()
@@ -1243,13 +1300,15 @@ func (mq *RedisStreamMQ) Close() error {
 	case <-done:
 		mq.logger.Info("All consumers stopped gracefully")
 	case <-time.After(30 * time.Second):
-		mq.logger.Warn("Timeout waiting for consumers to stop")
+		mq.logger.Warn("Timeout waiting for consumers to stop - forcing shutdown")
 	}
 
 	// Close Redis client
 	if mq.client != nil {
 		if err := mq.client.Close(); err != nil {
 			mq.logger.Error("Error closing Redis client", "error", err)
+		} else {
+			mq.logger.Debug("Redis client closed successfully")
 		}
 	}
 
@@ -1321,6 +1380,14 @@ func getGroupNames(groups []redis.XInfoGroup) []string {
 	return names
 }
 
+// minDuration returns the minimum of two durations
+func minDuration(a, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // incrementMessageID increments a Redis message ID to avoid duplicates
 func (mq *RedisStreamMQ) incrementMessageID(msgID string) string {
 	// Redis message IDs are in format: timestamp-sequence
@@ -1342,62 +1409,59 @@ func (mq *RedisStreamMQ) incrementMessageID(msgID string) string {
 }
 
 // claimPendingMessagesBatch claims and processes pending messages in batches
-func (mq *RedisStreamMQ) claimPendingMessagesBatch(streamName, groupName string, config ConsumerConfig, handler BatchMessageHandler) {
-	mq.logger.Info("claimPendingMessagesBatch called", "streamName", streamName, "groupName", groupName)
+func (mq *RedisStreamMQ) claimPendingMessagesBatch(
+	streamName, groupName string,
+	config ConsumerConfig,
+	handler BatchMessageHandler,
+) {
+	mq.logger.Info("claimPendingMessagesBatch called",
+		"streamName", streamName,
+		"groupName", groupName)
 
 	ctx, cancel := context.WithTimeout(mq.ctx, 10*time.Second)
 	defer cancel()
 
-	// Get pending messages for this consumer group
-	pending, err := mq.client.XPending(ctx, streamName, groupName).Result()
-	if err != nil {
-		mq.logger.Error("Failed to get pending messages", "error", err)
-		return
-	}
+	start := "0-0"
+	for {
+		// XAUTOCLAIM returns messages + next cursor
+		claimed, next, err := mq.client.XAutoClaim(ctx, &redis.XAutoClaimArgs{
+			Stream:   streamName,
+			Group:    groupName,
+			Consumer: config.ConsumerName,
+			MinIdle:  time.Second,
+			Start:    start,
+			Count:    config.BatchSize,
+		}).Result()
+		if err != nil {
+			mq.logger.Error("XAUTOCLAIM failed", "error", err)
+			return
+		}
 
-	mq.logger.Info("Pending messages info", "count", pending.Count)
+		if len(claimed) == 0 {
+			break
+		}
 
-	if pending.Count == 0 {
-		mq.logger.Info("No pending messages to claim")
-		return
-	}
-
-	mq.logger.Info("Claiming pending messages", "count", pending.Count)
-
-	// Claim all pending messages that are older than 1 second
-	claimed, err := mq.client.XClaim(ctx, &redis.XClaimArgs{
-		Stream:   streamName,
-		Group:    groupName,
-		Consumer: config.ConsumerName,
-		MinIdle:  time.Second,
-	}).Result()
-
-	if err != nil {
-		mq.logger.Error("Failed to claim pending messages", "error", err)
-		return
-	}
-
-	if len(claimed) == 0 {
-		mq.logger.Info("No messages to claim (all are too recent)")
-		return
-	}
-
-	mq.logger.Info("Claimed pending messages", "count", len(claimed))
-
-	// Process claimed messages as a batch
-	if len(claimed) > 0 {
+		mq.logger.Info("Claimed pending messages", "count", len(claimed))
 		mq.metrics.AddConsumedMessages(config.TopicName, int64(len(claimed)))
-		mq.processBatchWithHandler(streamName, groupName, config, claimed, handler)
+
+		// process the batch
+		mq.processBatchWithHandler(streamName, groupName, config, claimed, handler, fmt.Sprintf("[%s]", config.ConsumerName))
+
+		// update cursor
+		if next == "0-0" {
+			break
+		}
+		start = next
 	}
 }
 
-// processBatchWithHandler processes a batch of messages using the batch handler
+// processBatchWithHandlerEnhanced processes a batch with MRE Consumer patterns
 func (mq *RedisStreamMQ) processBatchWithHandler(streamName, groupName string, config ConsumerConfig,
-	messages []redis.XMessage, handler BatchMessageHandler) {
+	messages []redis.XMessage, handler BatchMessageHandler, logPrefix string) error {
 
 	defer func() {
 		if r := recover(); r != nil {
-			mq.logger.Error("Panic in batch handler",
+			mq.logger.Error("Panic in enhanced batch handler",
 				"panic", r, "batch_size", len(messages))
 			mq.metrics.AddProcessingErrors(config.TopicName, int64(len(messages)))
 		}
@@ -1406,11 +1470,7 @@ func (mq *RedisStreamMQ) processBatchWithHandler(streamName, groupName string, c
 	startTime := time.Now()
 	batchSize := len(messages)
 
-	mq.logger.Info("Processing batch with handler",
-		"stream", streamName,
-		"batch_size", batchSize)
-
-	// Process the entire batch at once using the batch handler
+	// Process the entire batch at once using the batch handler with timeout
 	handlerCtx, handlerCancel := context.WithTimeout(mq.ctx, config.ConsumerTimeout)
 	defer handlerCancel()
 
@@ -1422,58 +1482,121 @@ func (mq *RedisStreamMQ) processBatchWithHandler(streamName, groupName string, c
 	if err != nil {
 		// Check if it's a context cancellation error (expected during client disconnect)
 		if err == context.Canceled || err == context.DeadlineExceeded {
-			mq.logger.Debug("Batch processing canceled",
+			mq.logger.Debug("Enhanced batch processing canceled",
 				"topic", config.TopicName,
 				"batch_size", batchSize,
 				"reason", err.Error())
 		} else {
-			mq.logger.Error("Error processing batch",
+			mq.logger.Error("Error processing enhanced batch",
 				"topic", config.TopicName,
 				"batch_size", batchSize,
 				"error", err)
 			mq.metrics.AddProcessingErrors(config.TopicName, int64(batchSize))
 		}
-	} else {
-		mq.metrics.AddMessagesProcessed(config.TopicName, int64(batchSize))
+		return err // Return error to leave messages unacked
+	}
 
-		// Auto-ack all messages in the batch if enabled
-		if config.AutoAck {
-			// Use pipeline for faster ACK operations
-			ackCtx, ackCancel := context.WithTimeout(mq.ctx, 5*time.Second)
-			defer ackCancel()
+	mq.metrics.AddMessagesProcessed(config.TopicName, int64(batchSize))
 
-			pipe := mq.client.Pipeline()
+	// Auto-ack all messages in the batch if enabled
+	if config.AutoAck {
+		// Use pipeline for faster ACK operations
+		ackCtx, ackCancel := context.WithTimeout(mq.ctx, 5*time.Second)
+		defer ackCancel()
 
-			// Add all ACK commands to pipeline
+		pipe := mq.client.Pipeline()
+
+		// Add all ACK commands to pipeline
+		for _, msg := range messages {
+			pipe.XAck(ackCtx, streamName, groupName, msg.ID)
+		}
+
+		// Execute all ACKs at once
+		_, err := pipe.Exec(ackCtx)
+		if err != nil {
+			mq.logger.Error("Enhanced batch ACK failed", "error", err, "batch_size", len(messages))
+			return fmt.Errorf("ack pipeline failed: %w", err)
+		}
+
+		// Track successful ACKs
+		mq.metrics.AddMessagesAcknowledged(config.TopicName, int64(len(messages)))
+
+		// Delete messages if configured
+		if mq.config.Consumers.DeleteAfterAck {
+			delCtx, delCancel := context.WithTimeout(mq.ctx, 5*time.Second)
+			defer delCancel()
+
+			delPipe := mq.client.Pipeline()
 			for _, msg := range messages {
-				pipe.XAck(ackCtx, streamName, groupName, msg.ID)
+				delPipe.XDel(delCtx, streamName, msg.ID)
 			}
-
-			// Execute all ACKs at once
-			_, err := pipe.Exec(ackCtx)
-			if err == nil {
-				// Track successful ACKs
-				mq.metrics.AddMessagesAcknowledged(config.TopicName, int64(len(messages)))
-			} else {
-				mq.logger.Error("Batch ACK failed", "error", err, "batch_size", len(messages))
-			}
-
-			// Delete messages if configured
-			if mq.config.Consumers.DeleteAfterAck {
-				delCtx, delCancel := context.WithTimeout(mq.ctx, 5*time.Second)
-				defer delCancel()
-
-				delPipe := mq.client.Pipeline()
-				for _, msg := range messages {
-					delPipe.XDel(delCtx, streamName, msg.ID)
-				}
-				delPipe.Exec(delCtx)
-			}
+			delPipe.Exec(delCtx)
 		}
 	}
 
-	mq.logger.Info("Batch processing completed",
-		"stream", streamName,
-		"batch_size", batchSize,
-		"duration", processingTime)
+	// Log completion for large batches
+	if batchSize >= 1000 {
+		mq.logger.Info("Enhanced batch processing completed",
+			"stream", streamName,
+			"batch_size", batchSize,
+			"duration", processingTime)
+	}
+
+	return nil
+}
+
+// claimPendingMessagesEnhanced claims and processes pending messages using XAUTOCLAIM
+func (mq *RedisStreamMQ) claimPendingMessagesEnhanced(
+	streamName, groupName string,
+	config ConsumerConfig,
+	handler BatchMessageHandler,
+	logPrefix string,
+) {
+	ctx, cancel := context.WithTimeout(mq.ctx, 10*time.Second)
+	defer cancel()
+
+	start := "0-0"
+	for {
+		select {
+		case <-mq.ctx.Done():
+			return
+		default:
+		}
+
+		// XAUTOCLAIM returns messages + next cursor
+		claimed, next, err := mq.client.XAutoClaim(ctx, &redis.XAutoClaimArgs{
+			Stream:   streamName,
+			Group:    groupName,
+			Consumer: config.ConsumerName,
+			MinIdle:  time.Second, // Claim messages idle for 1+ seconds
+			Start:    start,
+			Count:    config.BatchSize,
+		}).Result()
+
+		if err != nil {
+			mq.logger.Error("Enhanced XAUTOCLAIM failed", "error", err)
+			return
+		}
+
+		if len(claimed) == 0 && next == "0-0" {
+			// Nothing to claim
+			return
+		}
+
+		if len(claimed) > 0 {
+			mq.logger.Info("Enhanced claimed pending messages", "count", len(claimed))
+			mq.metrics.AddConsumedMessages(config.TopicName, int64(len(claimed)))
+
+			// Process the claimed batch
+			if err := mq.processBatchWithHandler(streamName, groupName, config, claimed, handler, logPrefix); err != nil {
+				mq.logger.Error("Enhanced claimed batch processing error", "error", err)
+			}
+		}
+
+		// Advance cursor
+		if next == "0-0" {
+			return
+		}
+		start = next
+	}
 }

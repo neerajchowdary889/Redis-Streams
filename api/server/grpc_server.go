@@ -285,29 +285,40 @@ func (s *RedisStreamsServer) Subscribe(req *pb.SubscribeRequest, stream pb.Redis
 	}
 
 	if req.ConsumerName == "" {
-
 		pairs := topic_config.GetStreamConsumerPairs()
 		req.ConsumerName = pairs[req.Topic]["consumer_name"]
 	}
 
+	// Enhanced configuration with MRE Consumer patterns
 	conf := mq.ConsumerConfig{
 		TopicName:       req.Topic,
 		ConsumerName:    req.ConsumerName,
-		StartID:         ">", // Read new messages only for production
+		StartID:         req.StartId, // Use StartId from request, defaults to "0" for historical data
 		ConsumerGroup:   req.ConsumerGroup,
 		BatchSize:       req.BatchSize,
 		BlockTimeout:    time.Duration(req.BlockTimeoutMs) * time.Millisecond,
 		ConsumerTimeout: time.Duration(req.ConsumerTimeoutMs) * time.Millisecond,
 		AutoAck:         req.AutoAck,
+		MaxRetries:      3, // Add retry logic
 	}
 
-	// Batch processing variables
-	var lastProcessedID string = "0"
+	// Apply defaults if not specified
+	if conf.BatchSize == 0 {
+		conf.BatchSize = 10000 // Default batch size
+	}
+	if conf.BlockTimeout == 0 {
+		conf.BlockTimeout = 1 * time.Second
+	}
+	if conf.ConsumerTimeout == 0 {
+		conf.ConsumerTimeout = 30 * time.Second
+	}
+	if conf.StartID == "" {
+		conf.StartID = ">" // Default to new messages for consumer groups
+	}
 
-	// Pass the stream context to the subscription
-	fmt.Printf("gRPC Server: Calling mq.SubscribeBatch with config: %+v\n", conf)
+	fmt.Printf("gRPC Server: Using enhanced config: %+v\n", conf)
 
-	// Create batch handler that processes entire batches
+	// Create enhanced batch handler with MRE Consumer patterns
 	batchHandler := func(ctx context.Context, topic string, messages []redis.XMessage) error {
 		// Check if client is still connected
 		select {
@@ -316,7 +327,10 @@ func (s *RedisStreamsServer) Subscribe(req *pb.SubscribeRequest, stream pb.Redis
 		default:
 		}
 
-		fmt.Printf("gRPC Server: Received TRUE batch of %d messages\n", len(messages))
+		// Log batch info (only for large batches to reduce noise)
+		if len(messages) >= 1000 {
+			fmt.Printf("gRPC Server: Processing large batch of %d messages\n", len(messages))
+		}
 
 		// Convert entire batch to protobuf messages at once
 		pbMessages := make([]*pb.Message, 0, len(messages))
@@ -328,41 +342,49 @@ func (s *RedisStreamsServer) Subscribe(req *pb.SubscribeRequest, stream pb.Redis
 				Fields: toStruct(msg.Values),
 			}
 			pbMessages = append(pbMessages, pbMsg)
-			lastProcessedID = msg.ID
 		}
 
-		// Send the entire batch at once
-		fmt.Printf("gRPC Server: Sending TRUE batch of %d messages (last ID: %s)\n", len(pbMessages), lastProcessedID)
-		if err := s.sendBatch(stream, pbMessages, lastProcessedID); err != nil {
-			return err
+		// Send the entire batch at once with error handling
+		if err := s.sendBatch(stream, pbMessages, messages[len(messages)-1].ID); err != nil {
+			// Check if it's a client disconnect error
+			if err == context.Canceled || err == context.DeadlineExceeded {
+				return ctx.Err() // Return context error for proper handling
+			}
+			return fmt.Errorf("failed to send batch: %w", err)
 		}
 
 		return nil
 	}
 
-	// Start the subscription in a goroutine
+	// Start the subscription in a goroutine with proper error handling
 	subscriptionDone := make(chan error, 1)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				subscriptionDone <- fmt.Errorf("subscription panic: %v", r)
+			}
+		}()
+
 		err := s.mq.SubscribeBatch(conf, batchHandler)
 		subscriptionDone <- err
 	}()
 
-	// Wait for either the subscription to complete or the client to disconnect
+	// Wait for the subscription to start successfully, then wait for client disconnect
 	select {
 	case err := <-subscriptionDone:
 		if err != nil {
 			fmt.Printf("gRPC Server: mq.SubscribeBatch failed: %v\n", err)
 			return err
 		}
-		fmt.Printf("gRPC Server: mq.SubscribeBatch succeeded\n")
+		fmt.Printf("gRPC Server: mq.SubscribeBatch started successfully\n")
 	case <-ctx.Done():
-		fmt.Printf("gRPC Server: Client disconnected, ending subscription\n")
+		fmt.Printf("gRPC Server: Client disconnected before subscription started\n")
 		return nil
 	}
 
-	// Wait for the stream context to be done (client disconnects)
+	// Now wait for client to disconnect
+	fmt.Printf("gRPC Server: Waiting for client to disconnect...\n")
 	<-ctx.Done()
-
 	fmt.Printf("gRPC Server: Client disconnected, ending subscription\n")
 	return nil
 }
@@ -373,12 +395,23 @@ func (s *RedisStreamsServer) sendBatch(stream pb.RedisStreams_SubscribeServer, m
 		return nil
 	}
 
-	fmt.Printf("gRPC Server: Sending batch of %d messages (last ID: %s)\n", len(messages), lastID)
+	// fmt.Printf("gRPC Server: Sending batch of %d messages (last ID: %s)\n", len(messages), lastID)
 
-	// Send all messages in the batch
-	for _, msg := range messages {
+	// Send all messages in the batch with client disconnect detection
+	for i, msg := range messages {
+		// Check if client is still connected before sending
+		select {
+		case <-stream.Context().Done():
+			return stream.Context().Err() // Client disconnected
+		default:
+		}
+
 		if err := stream.Send(msg); err != nil {
-			return fmt.Errorf("failed to send message in batch: %w", err)
+			// Check if it's a client disconnect error
+			if err == context.Canceled || err == context.DeadlineExceeded {
+				return stream.Context().Err()
+			}
+			return fmt.Errorf("failed to send message %d in batch: %w", i, err)
 		}
 	}
 
@@ -811,10 +844,60 @@ func toStruct(m map[string]interface{}) *structpb.Struct {
 		return &structpb.Struct{Fields: make(map[string]*structpb.Value)}
 	}
 
-	s, err := structpb.NewStruct(m)
-	if err != nil {
-		fmt.Printf("Error converting map to struct: %v\n", err)
-		return &structpb.Struct{Fields: make(map[string]*structpb.Value)}
+	// Convert the map to a protobuf-compatible format
+	fields := make(map[string]*structpb.Value)
+	for k, v := range m {
+		value, err := toStructValue(v)
+		if err != nil {
+			fmt.Printf("Error converting field %s to struct value: %v\n", k, err)
+			// Convert to string as fallback
+			fields[k] = &structpb.Value{
+				Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("%v", v)},
+			}
+		} else {
+			fields[k] = value
+		}
 	}
-	return s
+
+	return &structpb.Struct{Fields: fields}
+}
+
+// toStructValue converts a Go value to a protobuf Value
+func toStructValue(v interface{}) (*structpb.Value, error) {
+	switch val := v.(type) {
+	case nil:
+		return &structpb.Value{Kind: &structpb.Value_NullValue{}}, nil
+	case bool:
+		return &structpb.Value{Kind: &structpb.Value_BoolValue{BoolValue: val}}, nil
+	case int:
+		return &structpb.Value{Kind: &structpb.Value_NumberValue{NumberValue: float64(val)}}, nil
+	case int32:
+		return &structpb.Value{Kind: &structpb.Value_NumberValue{NumberValue: float64(val)}}, nil
+	case int64:
+		return &structpb.Value{Kind: &structpb.Value_NumberValue{NumberValue: float64(val)}}, nil
+	case float32:
+		return &structpb.Value{Kind: &structpb.Value_NumberValue{NumberValue: float64(val)}}, nil
+	case float64:
+		return &structpb.Value{Kind: &structpb.Value_NumberValue{NumberValue: val}}, nil
+	case string:
+		return &structpb.Value{Kind: &structpb.Value_StringValue{StringValue: val}}, nil
+	case []interface{}:
+		// Handle arrays
+		values := make([]*structpb.Value, len(val))
+		for i, item := range val {
+			itemValue, err := toStructValue(item)
+			if err != nil {
+				return nil, err
+			}
+			values[i] = itemValue
+		}
+		return &structpb.Value{Kind: &structpb.Value_ListValue{ListValue: &structpb.ListValue{Values: values}}}, nil
+	case map[string]interface{}:
+		// Handle nested maps
+		nestedStruct := toStruct(val)
+		return &structpb.Value{Kind: &structpb.Value_StructValue{StructValue: nestedStruct}}, nil
+	default:
+		// For any other type, convert to string
+		return &structpb.Value{Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("%v", val)}}, nil
+	}
 }
