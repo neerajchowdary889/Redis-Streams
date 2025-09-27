@@ -3,16 +3,16 @@ redis:
   port: 6379
   password: Neeraj123
   database: 2
-  pool_size: 16  # Increased for high throughput
-  min_idle_conns: 8  # Increased for better connection reuse
+  pool_size: 64  # Increased for 50k batch processing
+  min_idle_conns: 16  # Increased for better connection reuse
   max_retries: 3
   retry_backoff: 8ms
   min_retry_backoff: 8ms
   max_retry_backoff: 512ms
-  dial_timeout: 5s
-  read_timeout: 3s
-  write_timeout: 3s
-  pool_timeout: 4s
+  dial_timeout: 10s  # Increased for large batches
+  read_timeout: 30s  # Increased for large batches
+  write_timeout: 30s  # Increased for large batches
+  pool_timeout: 10s  # Increased for high concurrency
   idle_timeout: 5m
   max_conn_age: 30m  # Connection recycling
   client_name: MRE
@@ -26,31 +26,31 @@ streams:
   trim_interval: 5m
 
 consumers:
-  default_batch_size: 50  # Increased for better throughput
-  default_block_timeout: 100ms
-  default_consumer_timeout: 5s
+  default_batch_size: 50000  # Up to 50k messages per batch
+  default_block_timeout: 5s  # Increased to match client timeout
+  default_consumer_timeout: 30s  # Increased for better reliability
   default_auto_ack: true
   delete_after_ack: true
-  max_pending_messages: 10000  # Increased for high throughput
+  max_pending_messages: 100000  # Increased for high throughput
   claim_min_idle_time: 10s
   claim_interval: 15s
 
 topics:
   - name: "user.lookup"
     stream_name: "user:lookup"
-    max_len: 100000
+    consumer_group: "user-lookup-group"
+    max_len: 1000000
     max_age: 24h
     trim_strategy: "MAXLEN"
-    consumer_group: "user-lookup-group"
     retry_attempts: 3
     description: "User lookup events"
 
   - name: "user.failed.lookup"
     stream_name: "user:failed.lookup"
-    max_len: 100000
+    consumer_group: "user-lookup-group"
+    max_len: 200000
     max_age: 24h
     trim_strategy: "MAXLEN"
-    consumer_group: "user-lookup-group"
     retry_attempts: 3
     description: "User lookup failed events"
 
@@ -72,7 +72,7 @@ performance:
   enable_compression: false  # Disable for Redis streams
   enable_keep_alive: true
   keep_alive_interval: 30s
-  max_concurrent_streams: 100
-  worker_pool_size: 8  # CPU cores * 2
+  max_concurrent_streams: 1000  # Increased for high throughput
+  worker_pool_size: 32  # Increased for 50k batch processing
   batch_flush_interval: 10ms
-  memory_pool_size: 1000
+  memory_pool_size: 10000  # Increased for large batches

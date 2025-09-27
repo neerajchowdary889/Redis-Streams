@@ -10,7 +10,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
-	pb "MRETest/RedisStreams/api/proto"
+	pb "RedisStreams/api/proto"
 )
 
 type LookupClient struct {

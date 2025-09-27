@@ -4,459 +4,490 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
-	"os/signal"
-	"strconv"
 	"strings"
 	"sync"
-	"syscall"
+	"sync/atomic"
 	"time"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-
-	pb "MRETest/RedisStreams/api/proto"
+	"github.com/redis/go-redis/v9"
 )
 
-type Result struct {
-	Epoch    uint64  // epoch used for the placement
-	Primary  int16   // shard ID of the primary node
-	Replicas []int16 // list of replica shard IDs (length = Replicas-1, may be empty)
-	All      []int16 // combined list of [primary] + replicas
+// ==============================
+// Config & Metrics
+// ==============================
+
+type RedisTLSConfig struct {
+	Enabled bool
+	// Add fields as needed (CA, cert, key, InsecureSkipVerify, etc.)
 }
 
-type LookupRequest struct {
-	QueryID    string            `json:"query_id"`
-	UserID     string            `json:"user_id"`
-	LookupType string            `json:"lookup_type"`
-	Fields     map[string]string `json:"fields"`
-	Timestamp  string            `json:"timestamp"`
-	Result     *Result           `json:"result,omitempty"`
+type MREConsumerConfig struct {
+	// Redis connection
+	Addr         string // "host:port"
+	Password     string
+	DB           int
+	ClientName   string
+	PoolSize     int
+	MinIdleConns int
+	DialTimeout  time.Duration
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
+	PoolTimeout  time.Duration
+	MaxRetries   int
+	MinBackoff   time.Duration
+	MaxBackoff   time.Duration
+	TLS          RedisTLSConfig
+
+	// Streams
+	Stream        string // e.g., "user:lookup"
+	ConsumerGroup string // e.g., "user-lookup-group"
+	// if group doesn't exist, create it with "0" (from beginning)
+	AutoCreateGroup bool
+
+	// Workers
+	NumWorkers     int           // number of consumers in the group
+	BatchSize      int64         // e.g., 50_000 (COUNT)
+	BlockTimeout   time.Duration // XREADGROUP BLOCK
+	MinIdleToClaim time.Duration // XAUTOCLAIM MinIdle
+	ClaimBatchSize int64         // XAUTOCLAIM COUNT
+	DeleteAfterAck bool          // XDEL after XACK
+
+	// Processing
+	WorkerTimeout   time.Duration // handler timeout per batch
+	ShutdownTimeout time.Duration // graceful stop
+
+	// Logging
+	LogEveryN int // log progress every N batches per worker
 }
 
-type LookupConsumer struct {
-	client    pb.RedisStreamsClient
-	conn      *grpc.ClientConn
-	batchSize int
-	mu        sync.Mutex
+type Metrics struct {
+	MessagesRead      int64
+	MessagesProcessed int64
+	MessagesAcked     int64
+	MessagesClaimed   int64
+	ProcessingErrors  int64
+	AckErrors         int64
+	ClaimErrors       int64
+	ReadErrors        int64
+	LastBatchDuration int64 // ns
+	StartTime         time.Time
 }
 
-func NewLookupConsumer(serverAddr string) (*LookupConsumer, error) {
-	conn, err := grpc.Dial(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to gRPC server: %v", err)
-	}
+// ==============================
+// Handler contract
+// ==============================
 
-	return &LookupConsumer{
-		client:    pb.NewRedisStreamsClient(conn),
-		conn:      conn,
-		batchSize: 50, // Process 50 entries in a batch
-	}, nil
+// BatchHandler processes a batch of XMessages atomically (your business logic).
+// Return an error to leave the batch unacked (so it can be retried/claimed later).
+type BatchHandler func(ctx context.Context, batch []redis.XMessage) error
+
+// ==============================
+// Consumer
+// ==============================
+
+type MREConsumer struct {
+	cfg     *MREConsumerConfig
+	cli     *redis.Client
+	metrics *Metrics
+
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	wg sync.WaitGroup
 }
 
-func (c *LookupConsumer) Close() error {
-	return c.conn.Close()
-}
+func DefaultMREConsumerConfig() *MREConsumerConfig {
+	return &MREConsumerConfig{
+		Addr:         "127.0.0.1:6379",
+		DB:           0,
+		ClientName:   "mre-consumer",
+		PoolSize:     64,
+		MinIdleConns: 8,
+		DialTimeout:  3 * time.Second,
+		ReadTimeout:  0, // let commands set their own Block timeouts
+		WriteTimeout: 0,
+		PoolTimeout:  4 * time.Second,
+		MaxRetries:   3,
+		MinBackoff:   10 * time.Millisecond,
+		MaxBackoff:   500 * time.Millisecond,
 
-// Parse comma-separated string back to []int16
-func parseInt16Slice(str string) []int16 {
-	if str == "" {
-		return []int16{}
-	}
+		Stream:          "user:lookup",
+		ConsumerGroup:   "user-lookup-group",
+		AutoCreateGroup: true,
 
-	parts := strings.Split(str, ",")
-	result := make([]int16, 0, len(parts))
+		NumWorkers:     3,
+		BatchSize:      50_000,
+		BlockTimeout:   1 * time.Second,
+		MinIdleToClaim: 7 * time.Second,
+		ClaimBatchSize: 50_000,
+		DeleteAfterAck: true,
 
-	for _, part := range parts {
-		val, err := strconv.ParseInt(strings.TrimSpace(part), 10, 16)
-		if err != nil {
-			log.Printf("Warning: failed to parse int16 from '%s': %v", part, err)
-			continue
-		}
-		result = append(result, int16(val))
-	}
+		WorkerTimeout:   30 * time.Second,
+		ShutdownTimeout: 30 * time.Second,
 
-	return result
-}
-
-// Parse result data from the message
-func parseResultData(resultData map[string]interface{}) *Result {
-	if resultData == nil {
-		return nil
-	}
-
-	// Parse primary
-	primaryStr, ok := resultData["primary"].(string)
-	if !ok {
-		return nil
-	}
-	primary, err := strconv.ParseInt(primaryStr, 10, 16)
-	if err != nil {
-		log.Printf("Warning: failed to parse primary: %v", err)
-		return nil
-	}
-
-	// Parse replicas
-	replicasStr, ok := resultData["replicas"].(string)
-	if !ok {
-		replicasStr = ""
-	}
-	replicas := parseInt16Slice(replicasStr)
-
-	// Parse all
-	allStr, ok := resultData["all"].(string)
-	if !ok {
-		allStr = ""
-	}
-	all := parseInt16Slice(allStr)
-
-	// Parse epoch
-	epoch, ok := resultData["epoch"].(float64)
-	if !ok {
-		epoch = 0
-	}
-
-	return &Result{
-		Epoch:    uint64(epoch),
-		Primary:  int16(primary),
-		Replicas: replicas,
-		All:      all,
+		LogEveryN: 10,
 	}
 }
 
-func (c *LookupConsumer) processMessage(message *pb.Message) {
-	log.Printf("=== Processing Message ===")
-	log.Printf("ID: %s", message.Id)
-	log.Printf("Topic: %s", message.Topic)
-
-	// Parse JSON struct from protobuf
-	jsonData := message.Fields.AsMap()
-	log.Printf("Raw JSON: %+v", jsonData) // <-- Add this for debugging
-
-	// Extract fields
-	queryID, _ := jsonData["query_id"].(string)
-	userID, _ := jsonData["user_id"].(string)
-	lookupType, _ := jsonData["lookup_type"].(string)
-	timestamp, _ := jsonData["timestamp"].(string)
-
-	// Handle "fields" map
-	fieldsMap := make(map[string]string)
-	if fields, ok := jsonData["fields"].(map[string]interface{}); ok {
-		for k, v := range fields {
-			if str, ok := v.(string); ok {
-				fieldsMap[k] = str
-			}
-		}
+// NewMREConsumer builds a consumer that reads from a Redis Stream using consumer-group workers.
+func NewMREConsumer(cfg *MREConsumerConfig) (*MREConsumer, error) {
+	if cfg == nil {
+		cfg = DefaultMREConsumerConfig()
 	}
 
-	// Handle "result"
-	var result *Result
-	if resultData, ok := jsonData["result"].(map[string]interface{}); ok {
-		result = parseResultData(resultData)
+	opts := &redis.Options{
+		Addr:         cfg.Addr,
+		Password:     cfg.Password,
+		DB:           cfg.DB,
+		PoolSize:     cfg.PoolSize,
+		MinIdleConns: cfg.MinIdleConns,
+
+		MaxRetries:      cfg.MaxRetries,
+		MinRetryBackoff: cfg.MinBackoff,
+		MaxRetryBackoff: cfg.MaxBackoff,
+		DialTimeout:     cfg.DialTimeout,
+		ReadTimeout:     cfg.ReadTimeout,
+		WriteTimeout:    cfg.WriteTimeout,
+		PoolTimeout:     cfg.PoolTimeout,
+		ClientName:      cfg.ClientName,
+	}
+	// (If TLS is needed, add TLSConfig here.)
+
+	cli := redis.NewClient(opts)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Ping
+	if err := cli.Ping(ctx).Err(); err != nil {
+		cancel()
+		return nil, fmt.Errorf("redis ping failed: %w", err)
 	}
 
-	req := LookupRequest{
-		QueryID:    queryID,
-		UserID:     userID,
-		LookupType: lookupType,
-		Fields:     fieldsMap,
-		Timestamp:  timestamp,
-		Result:     result,
+	cons := &MREConsumer{
+		cfg: cfg,
+		cli: cli,
+		metrics: &Metrics{
+			StartTime: time.Now(),
+		},
+		ctx:    ctx,
+		cancel: cancel,
 	}
-
-	log.Printf("Query ID: %s", req.QueryID)
-	log.Printf("User ID: %s", req.UserID)
-	log.Printf("Lookup Type: %s", req.LookupType)
-	log.Printf("Fields: %+v", req.Fields)
-	log.Printf("Timestamp: %s", req.Timestamp)
-
-	if req.Result != nil {
-		log.Printf("Result - Epoch: %d, Primary: %d, Replicas: %v, All: %v",
-			req.Result.Epoch, req.Result.Primary, req.Result.Replicas, req.Result.All)
-	} else {
-		log.Printf("Result: nil")
-	}
-
-	log.Printf("========================\n")
+	return cons, nil
 }
 
-// Consume messages from a stream
-func (c *LookupConsumer) ConsumeStream(streamName string, consumerGroup string, consumerName string, count int32) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+// ensureGroup creates the group if not exists (if AutoCreateGroup is true).
+func (c *MREConsumer) ensureGroup() error {
+	ctx, cancel := context.WithTimeout(c.ctx, 5*time.Second)
 	defer cancel()
 
-	log.Printf("Starting to consume from stream: %s", streamName)
-	log.Printf("Consumer Group: %s, Consumer: %s", consumerGroup, consumerName)
-
-	// Read messages from the stream
-	resp, err := c.client.ReadStream(ctx, &pb.ReadStreamRequest{
-		Topic:   streamName,
-		Count:   int64(count),
-		StartId: "0", // Start from the beginning
-	})
-	if err != nil {
-		return fmt.Errorf("failed to read stream: %v", err)
-	}
-
-	log.Printf("Found %d messages in stream", len(resp.Messages))
-
-	// Process each message
-	for _, message := range resp.Messages {
-		c.processMessage(message)
-
-		// Acknowledge the message to delete it
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		_, err := c.client.Ack(ctx, &pb.AckRequest{
-			Topic: streamName,
-			Id:    message.Id,
-		})
-		cancel()
-
-		if err != nil {
-			log.Printf("Warning: failed to ACK message %s: %v", message.Id, err)
-		} else {
-			log.Printf("ACKed message: %s", message.Id)
+	// Check stream first; if it doesn't exist and we want to mkstream: XGROUP CREATE <s> <g> 0 MKSTREAM
+	if c.cfg.AutoCreateGroup {
+		err := c.cli.XGroupCreateMkStream(ctx, c.cfg.Stream, c.cfg.ConsumerGroup, "0").Err()
+		if err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
+			return fmt.Errorf("XGroupCreateMkStream: %w", err)
 		}
+		return nil
 	}
+
+	// Validate the group exists
+	_, err := c.cli.XInfoGroups(ctx, c.cfg.Stream).Result()
+	if err != nil {
+		return fmt.Errorf("group check failed (AutoCreateGroup=false): %w", err)
+	}
+	return nil
+}
+
+// Start launches N worker-consumers that coordinate via the Redis consumer group.
+func (c *MREConsumer) Start(handler BatchHandler) error {
+	if err := c.ensureGroup(); err != nil {
+		return err
+	}
+
+	log.Printf("[MRE] starting %d workers on stream=%q group=%q (batch=%d)",
+		c.cfg.NumWorkers, c.cfg.Stream, c.cfg.ConsumerGroup, c.cfg.BatchSize)
+
+	// Start workers with unique consumer names
+	for i := 0; i < c.cfg.NumWorkers; i++ {
+		cName := fmt.Sprintf("%s-%d", safeName(c.cfg.ClientName, "mre"), i+1)
+		c.wg.Add(1)
+		go c.workerLoop(cName, handler)
+	}
+
+	// Optional: metrics ticker
+	c.wg.Add(1)
+	go c.metricPrinter()
 
 	return nil
 }
 
-// Subscribe to stream for real-time consumption
-func (c *LookupConsumer) SubscribeToStream(streamName string, consumerGroup string, consumerName string) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+// Stop requests a graceful shutdown and waits up to ShutdownTimeout.
+func (c *MREConsumer) Stop() {
+	log.Printf("[MRE] stopping...")
+	c.cancel()
 
-	log.Printf("Subscribing to stream: %s", streamName)
-	log.Printf("Consumer Group: %s, Consumer: %s", consumerGroup, consumerName)
-
-	// Create subscription request
-	req := &pb.SubscribeRequest{
-		Topic:             streamName,
-		ConsumerName:      consumerGroup,
-		BatchSize:         10,
-		BlockTimeoutMs:    5000, // 5 seconds
-		ConsumerTimeoutMs: 5000, // 5 seconds
-		AutoAck:           true,
-	}
-
-	// Start streaming
-	stream, err := c.client.Subscribe(ctx, req)
-	if err != nil {
-		return fmt.Errorf("failed to subscribe to stream: %v", err)
-	}
-
-	// Handle graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
+	done := make(chan struct{})
 	go func() {
-		<-sigChan
-		log.Println("Received shutdown signal, stopping consumer...")
-		cancel()
+		c.wg.Wait()
+		close(done)
 	}()
 
-	// Process messages as they arrive
+	select {
+	case <-done:
+	case <-time.After(c.cfg.ShutdownTimeout):
+		log.Printf("[MRE] stop timeout — forcing exit")
+	}
+
+	_ = c.cli.Close()
+	log.Printf("[MRE] stopped")
+}
+
+// ==============================
+// Worker Logic (XAUTOCLAIM + XREADGROUP)
+// ==============================
+
+func (c *MREConsumer) workerLoop(consumerName string, handler BatchHandler) {
+	defer c.wg.Done()
+
+	var batchCount int64
+	logPrefix := fmt.Sprintf("[wrk:%s]", consumerName)
+
+	backoff := 100 * time.Millisecond
+	maxBackoff := 5 * time.Second
+
+	// First, recovery pass: claim old PEL messages (MinIdle)
+	c.claimLoop(logPrefix, consumerName, handler)
+
 	for {
 		select {
-		case <-ctx.Done():
-			log.Println("Context cancelled, stopping consumer")
-			return nil
+		case <-c.ctx.Done():
+			return
 		default:
-			// Receive message
-			message, err := stream.Recv()
-			if err != nil {
-				if err.Error() == "EOF" {
-					log.Println("Stream ended")
-					return nil
-				}
-				log.Printf("Error receiving message: %v", err)
+		}
+
+		start := time.Now()
+		ctx, cancel := context.WithTimeout(c.ctx, c.cfg.BlockTimeout+2*time.Second)
+
+		streams, err := c.cli.XReadGroup(ctx, &redis.XReadGroupArgs{
+			Group:    c.cfg.ConsumerGroup,
+			Consumer: consumerName,
+			Streams:  []string{c.cfg.Stream, ">"}, // new messages only
+			Count:    c.cfg.BatchSize,
+			Block:    c.cfg.BlockTimeout,
+		}).Result()
+		cancel()
+
+		if err != nil {
+			if err == redis.Nil || strings.Contains(err.Error(), "deadline exceeded") {
+				// normal no-data case — just loop
+				continue
+			}
+			atomic.AddInt64(&c.metrics.ReadErrors, 1)
+			log.Printf("%s XREADGROUP error: %v — backing off %v", logPrefix, err, backoff)
+			time.Sleep(backoff)
+			backoff = minDuration(maxBackoff, time.Duration(float64(backoff)*1.5))
+			continue
+		}
+		backoff = 100 * time.Millisecond
+
+		for _, st := range streams {
+			if len(st.Messages) == 0 {
 				continue
 			}
 
-			// Process the message
-			c.processMessage(message)
+			atomic.AddInt64(&c.metrics.MessagesRead, int64(len(st.Messages)))
+			batchCount++
 
-			// Acknowledge the message to delete it
-			ackCtx, ackCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			_, err = c.client.Ack(ackCtx, &pb.AckRequest{
-				Topic: streamName,
-				Id:    message.Id,
-			})
-			ackCancel()
+			// Process batch
+			if err := c.processAndAckBatch(logPrefix, consumerName, st.Messages, handler); err != nil {
+				// Leave them pending for retry/claim later
+				log.Printf("%s batch error (left unacked): %v", logPrefix, err)
+				atomic.AddInt64(&c.metrics.ProcessingErrors, 1)
+			}
 
-			if err != nil {
-				log.Printf("Warning: failed to ACK message %s: %v", message.Id, err)
-			} else {
-				log.Printf("ACKed message: %s", message.Id)
+			// recovery cadence: after some batches, try a quick claim pass to help herd stuck messages
+			if batchCount%25 == 0 {
+				c.claimLoopShort(logPrefix, consumerName, handler, 500*time.Millisecond)
+			}
+
+			// metrics
+			atomic.StoreInt64(&c.metrics.LastBatchDuration, time.Since(start).Nanoseconds())
+			if c.cfg.LogEveryN > 0 && int(batchCount)%c.cfg.LogEveryN == 0 {
+				log.Printf("%s processed %d batches, total read=%d processed=%d acked=%d",
+					logPrefix, batchCount,
+					atomic.LoadInt64(&c.metrics.MessagesRead),
+					atomic.LoadInt64(&c.metrics.MessagesProcessed),
+					atomic.LoadInt64(&c.metrics.MessagesAcked),
+				)
 			}
 		}
 	}
 }
 
-// StartBatchConsumption starts batch consumption with specified parameters
-func (c *LookupConsumer) StartBatchConsumption(streamName, consumerGroup, consumerName string, count int32) error {
-	log.Printf("Starting batch consumption from stream: %s", streamName)
-	return c.ConsumeStream(streamName, consumerGroup, consumerName, count)
-}
+func (c *MREConsumer) processAndAckBatch(
+	logPrefix, consumerName string,
+	msgs []redis.XMessage,
+	handler BatchHandler,
+) error {
+	// Run handler with timeout
+	ctx, cancel := context.WithTimeout(c.ctx, c.cfg.WorkerTimeout)
+	defer cancel()
 
-// StartStreamConsumption starts continuous stream consumption
-func (c *LookupConsumer) StartStreamConsumption(streamName, consumerGroup, consumerName string) error {
-	log.Printf("Starting stream consumption from: %s", streamName)
-	return c.SubscribeToStream(streamName, consumerGroup, consumerName)
-}
-
-// StartBatchStreamConsumption starts batch stream consumption
-func (c *LookupConsumer) StartBatchStreamConsumption(streamName, consumerGroup, consumerName string) error {
-	log.Printf("Starting batch stream consumption from: %s", streamName)
-	return c.SubscribeToStreamWithBatching(streamName, consumerGroup, consumerName)
-}
-
-// SetBatchSize sets the batch size for processing
-func (c *LookupConsumer) SetBatchSize(size int) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.batchSize = size
-}
-
-// GetBatchSize returns the current batch size
-func (c *LookupConsumer) GetBatchSize() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.batchSize
-}
-
-// processBatch processes a batch of messages
-func (c *LookupConsumer) processBatch(messages []*pb.Message, streamName string) error {
-	if len(messages) == 0 {
-		return nil
+	if err := handler(ctx, msgs); err != nil {
+		return err
 	}
+	atomic.AddInt64(&c.metrics.MessagesProcessed, int64(len(msgs)))
 
-	var messageIDs []string
+	// Ack in pipeline
+	ackCtx, ackCancel := context.WithTimeout(c.ctx, 5*time.Second)
+	defer ackCancel()
 
-	// Process each message in the batch
-	for _, msg := range messages {
-		c.processMessage(msg)
-		messageIDs = append(messageIDs, msg.Id)
-
-		// Log progress
-		if len(messageIDs)%10 == 0 {
-			log.Printf("Processed %d/%d messages in batch", len(messageIDs), len(messages))
-		}
+	pipe := c.cli.Pipeline()
+	for _, m := range msgs {
+		pipe.XAck(ackCtx, c.cfg.Stream, c.cfg.ConsumerGroup, m.ID)
 	}
+	if _, err := pipe.Exec(ackCtx); err != nil {
+		atomic.AddInt64(&c.metrics.AckErrors, 1)
+		return fmt.Errorf("ack pipeline failed: %w", err)
+	}
+	atomic.AddInt64(&c.metrics.MessagesAcked, int64(len(msgs)))
 
-	// Acknowledge all processed messages
-	if len(messageIDs) > 0 {
-		for _, msgID := range messageIDs {
-			ackCtx, ackCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			_, err := c.client.Ack(ackCtx, &pb.AckRequest{
-				Topic: streamName,
-				Id:    msgID,
-			})
-			ackCancel()
-
-			if err != nil {
-				log.Printf("Warning: failed to ACK message %s: %v", msgID, err)
-			}
+	// Optional delete after ack
+	if c.cfg.DeleteAfterAck {
+		delCtx, delCancel := context.WithTimeout(c.ctx, 5*time.Second)
+		defer delCancel()
+		dpipe := c.cli.Pipeline()
+		for _, m := range msgs {
+			dpipe.XDel(delCtx, c.cfg.Stream, m.ID)
 		}
-		log.Printf("Acknowledged %d messages", len(messageIDs))
+		_, _ = dpipe.Exec(delCtx)
 	}
 
 	return nil
 }
 
-// SubscribeToStreamWithBatching - Enhanced version with batch processing
-func (c *LookupConsumer) SubscribeToStreamWithBatching(streamName string, consumerGroup string, consumerName string) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	log.Printf("Subscribing to stream: %s with batch size: %d", streamName, c.batchSize)
-	log.Printf("Consumer Group: %s, Consumer: %s", consumerGroup, consumerName)
-
-	// Create a buffered channel for messages
-	messageChan := make(chan *pb.Message, c.batchSize*2)
-	errChan := make(chan error, 1)
-
-	// Start a goroutine to read messages from the stream
-	go func() {
-		req := &pb.SubscribeRequest{
-			Topic:             streamName,
-			ConsumerName:      consumerGroup,
-			BatchSize:         int64(c.batchSize),
-			BlockTimeoutMs:    5000,  // 5 seconds
-			ConsumerTimeoutMs: 5000,  // 5 seconds
-			AutoAck:           false, // We'll handle ACKs manually
+// claimLoop sweeps the PEL with XAUTOCLAIM (MinIdle) until cursor completes.
+func (c *MREConsumer) claimLoop(logPrefix, consumerName string, handler BatchHandler) {
+	start := "0-0"
+	for {
+		select {
+		case <-c.ctx.Done():
+			return
+		default:
 		}
 
-		stream, err := c.client.Subscribe(ctx, req)
+		ctx, cancel := context.WithTimeout(c.ctx, 5*time.Second)
+		claimed, next, err := c.cli.XAutoClaim(ctx, &redis.XAutoClaimArgs{
+			Stream:   c.cfg.Stream,
+			Group:    c.cfg.ConsumerGroup,
+			Consumer: consumerName,
+			MinIdle:  c.cfg.MinIdleToClaim,
+			Start:    start,
+			Count:    c.cfg.ClaimBatchSize,
+		}).Result()
+		cancel()
+
 		if err != nil {
-			errChan <- fmt.Errorf("failed to subscribe to stream: %v", err)
+			atomic.AddInt64(&c.metrics.ClaimErrors, 1)
+			log.Printf("%s XAUTOCLAIM error: %v", logPrefix, err)
+			return
+		}
+		if len(claimed) == 0 && next == "0-0" {
+			// nothing to claim
 			return
 		}
 
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				msg, err := stream.Recv()
-				if err != nil {
-					if err.Error() == "EOF" {
-						log.Println("Stream ended")
-						return
-					}
-					log.Printf("Error receiving message: %v", err)
-					continue
-				}
-				messageChan <- msg
+		if len(claimed) > 0 {
+			atomic.AddInt64(&c.metrics.MessagesClaimed, int64(len(claimed)))
+			// process & ack claimed
+			if err := c.processAndAckBatch(logPrefix, consumerName, claimed, handler); err != nil {
+				// leave those claimed messages pending; they will be retried
+				log.Printf("%s claimed-batch error (left unacked): %v", logPrefix, err)
 			}
 		}
-	}()
 
-	// Handle graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+		// advance cursor
+		if next == "0-0" {
+			return
+		}
+		start = next
+	}
+}
 
-	go func() {
-		<-sigChan
-		log.Println("Received shutdown signal, stopping consumer...")
-		cancel()
-	}()
+// claimLoopShort runs a quick single pass to help move stuck PEL entries periodically.
+func (c *MREConsumer) claimLoopShort(logPrefix, consumerName string, handler BatchHandler, timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(c.ctx, timeout)
+	defer cancel()
 
-	// Process messages in batches
-	batch := make([]*pb.Message, 0, c.batchSize)
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
+	claimed, next, err := c.cli.XAutoClaim(ctx, &redis.XAutoClaimArgs{
+		Stream:   c.cfg.Stream,
+		Group:    c.cfg.ConsumerGroup,
+		Consumer: consumerName,
+		MinIdle:  c.cfg.MinIdleToClaim,
+		Start:    "0-0",
+		Count:    c.cfg.ClaimBatchSize,
+	}).Result()
+
+	if err != nil {
+		atomic.AddInt64(&c.metrics.ClaimErrors, 1)
+		log.Printf("%s quick XAUTOCLAIM error: %v", logPrefix, err)
+		return
+	}
+	_ = next
+
+	if len(claimed) > 0 {
+		atomic.AddInt64(&c.metrics.MessagesClaimed, int64(len(claimed)))
+		if err := c.processAndAckBatch(logPrefix, consumerName, claimed, handler); err != nil {
+			log.Printf("%s quick-claim batch error (left unacked): %v", logPrefix, err)
+		}
+	}
+}
+
+// ==============================
+// Metrics & Helpers
+// ==============================
+
+func (c *MREConsumer) metricPrinter() {
+	defer c.wg.Done()
+	t := time.NewTicker(5 * time.Second)
+	defer t.Stop()
 
 	for {
 		select {
-		case <-ctx.Done():
-			log.Println("Context cancelled, stopping consumer")
-			return nil
+		case <-c.ctx.Done():
+			return
+		case <-t.C:
+			read := atomic.LoadInt64(&c.metrics.MessagesRead)
+			proc := atomic.LoadInt64(&c.metrics.MessagesProcessed)
+			acked := atomic.LoadInt64(&c.metrics.MessagesAcked)
+			claimed := atomic.LoadInt64(&c.metrics.MessagesClaimed)
+			perr := atomic.LoadInt64(&c.metrics.ProcessingErrors)
+			aerr := atomic.LoadInt64(&c.metrics.AckErrors)
+			rerr := atomic.LoadInt64(&c.metrics.ReadErrors)
+			cerr := atomic.LoadInt64(&c.metrics.ClaimErrors)
 
-		case err := <-errChan:
-			return fmt.Errorf("error in stream subscription: %v", err)
+			uptime := time.Since(c.metrics.StartTime).Truncate(time.Second)
+			rate := float64(proc) / (float64(uptime) + 1e-9)
 
-		case msg := <-messageChan:
-			batch = append(batch, msg)
-			if len(batch) >= c.batchSize {
-				// Process the current batch
-				if err := c.processBatch(batch, streamName); err != nil {
-					log.Printf("Error processing batch: %v", err)
-				}
-				// Reset the batch
-				batch = make([]*pb.Message, 0, c.batchSize)
-			}
+			lastBatch := time.Duration(atomic.LoadInt64(&c.metrics.LastBatchDuration))
 
-		case <-ticker.C:
-			// Process any pending messages every second (for low traffic streams)
-			if len(batch) > 0 {
-				log.Printf("Processing partial batch of %d messages", len(batch))
-				if err := c.processBatch(batch, streamName); err != nil {
-					log.Printf("Error processing batch: %v", err)
-				}
-				batch = make([]*pb.Message, 0, c.batchSize)
-			}
+			log.Printf("[MRE][metrics] up=%v read=%d processed=%d acked=%d claimed=%d rate=%.1f/s lastBatch=%v errs{proc=%d ack=%d read=%d claim=%d}",
+				uptime, read, proc, acked, claimed, rate, lastBatch, perr, aerr, rerr, cerr)
 		}
 	}
+}
+
+func safeName(parts ...string) string {
+	s := strings.Join(parts, "-")
+	s = strings.ReplaceAll(s, " ", "-")
+	if len(s) > 64 {
+		return s[:64]
+	}
+	return s
+}
+
+func minDuration(a, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
 }

@@ -100,6 +100,18 @@
           "interval": "",
           "legendFormat": "{{topic}} - Processed",
           "refId": "B"
+        },
+        {
+          "expr": "sum(rate(redis_streams_messages_consumed_total[5m])) by (topic)",
+          "interval": "",
+          "legendFormat": "{{topic}} - Consumed",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(rate(redis_streams_messages_acknowledged_total[5m])) by (topic)",
+          "interval": "",
+          "legendFormat": "{{topic}} - Acknowledged",
+          "refId": "D"
         }
       ],
       "title": "Message Throughput (Rate)",
@@ -607,6 +619,180 @@
         }
       ],
       "title": "Total Message Counts",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(redis_streams_messages_consumed_total[1m])) by (topic)",
+          "interval": "",
+          "legendFormat": "{{topic}} - Consumed Rate",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(redis_streams_messages_acknowledged_total[1m])) by (topic)",
+          "interval": "",
+          "legendFormat": "{{topic}} - ACK Rate",
+          "refId": "B"
+        }
+      ],
+      "title": "Message Consumption & ACK Rates",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(redis_streams_messages_consumed_total) by (topic) - sum(redis_streams_messages_acknowledged_total) by (topic)",
+          "interval": "",
+          "legendFormat": "{{topic}} - Unacknowledged",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(redis_streams_messages_consumed_total) by (topic) / sum(redis_streams_messages_acknowledged_total) by (topic)",
+          "interval": "",
+          "legendFormat": "{{topic}} - Consumption/ACK Ratio",
+          "refId": "B"
+        }
+      ],
+      "title": "Unacknowledged Messages & ACK Ratio",
       "type": "timeseries"
     }
   ],
